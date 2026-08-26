@@ -4,7 +4,7 @@ const { Telegraf } = require("telegraf");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-const OWNER_ID = 1087968824;
+const OWNER_ID = 8480297110;
 
 function owner(ctx) {
   return String(ctx.from?.id) === String(OWNER_ID);
