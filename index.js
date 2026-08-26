@@ -818,15 +818,19 @@ bot.catch((error) => {
 // ============================
 
 
+
 // ===== ECONOMY SYSTEM =====
 
 const economyUsers = new Map();
 
-const ECONOMY_START = 100;
-const BONUS_AMOUNT = 500;
-const BONUS_COOLDOWN = 24 * 60 * 60 * 1000;
+const ECO_START = 100;
+const ECO_BONUS = 500;
 
-function economyGetUser(ctx) {
+const ECO_BONUS_CD = 24 * 60 * 60 * 1000;
+const ECO_WORK_CD = 60 * 60 * 1000;
+const ECO_TASK_CD = 30 * 60 * 1000;
+
+function ecoUser(ctx) {
   const id = String(ctx.from.id);
 
   if (!economyUsers.has(id)) {
@@ -834,140 +838,420 @@ function economyGetUser(ctx) {
       id: ctx.from.id,
       name: ctx.from.first_name || "Пользователь",
       username: ctx.from.username || null,
-      balance: ECONOMY_START,
-      lastBonus: 0
+      balance: ECO_START,
+      bank: 0,
+      lastBonus: 0,
+      lastWork: 0,
+      lastTask: 0
     });
   }
 
   const user = economyUsers.get(id);
 
   user.name = ctx.from.first_name || user.name;
-  user.username = ctx.from.username || user.username;
+
+  if (ctx.from.username) {
+    user.username = ctx.from.username;
+  }
 
   return user;
 }
 
-function economyName(user) {
+function ecoName(user) {
   return user.username
     ? `@${user.username}`
     : user.name;
 }
 
-// 💰 Баланс
+function ecoTime(ms) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return `${h} ч. ${m} мин.`;
+}
+
+// 💰 БАЛАНС
 bot.hears(/^!?баланс$/iu, async (ctx) => {
-  const user = economyGetUser(ctx);
+  const u = ecoUser(ctx);
 
   await ctx.reply(
     `💰 ВАШ БАЛАНС\n\n` +
-    `👤 ${economyName(user)}\n` +
-    `🪙 Монеты: ${user.balance}`
+    `👤 ${ecoName(u)}\n` +
+    `🪙 Кошелёк: ${u.balance}\n` +
+    `🏦 Банк: ${u.bank}\n` +
+    `💎 Всего: ${u.balance + u.bank}`
   );
 });
 
-// 🪙 Монеты
+// 🪙 МОНЕТЫ
 bot.hears(/^!?монеты$/iu, async (ctx) => {
-  const user = economyGetUser(ctx);
+  const u = ecoUser(ctx);
 
   await ctx.reply(
-    `🪙 У вас ${user.balance} монет.`
+    `🪙 У вас ${u.balance} монет.`
   );
 });
 
-// 🎁 Бонус
+// 🎁 БОНУС
 bot.hears(/^!?бонус$/iu, async (ctx) => {
-  const user = economyGetUser(ctx);
+  const u = ecoUser(ctx);
   const now = Date.now();
 
-  if (now - user.lastBonus < BONUS_COOLDOWN) {
-    const left = BONUS_COOLDOWN - (now - user.lastBonus);
-    const hours = Math.floor(left / 3600000);
-    const minutes = Math.floor((left % 3600000) / 60000);
+  if (now - u.lastBonus < ECO_BONUS_CD) {
+    const left = ECO_BONUS_CD - (now - u.lastBonus);
 
     return ctx.reply(
       `⏳ Бонус уже получен.\n\n` +
-      `Следующий бонус через: ${hours} ч. ${minutes} мин.`
+      `Следующий бонус через: ${ecoTime(left)}`
     );
   }
 
-  user.balance += BONUS_AMOUNT;
-  user.lastBonus = now;
+  u.balance += ECO_BONUS;
+  u.lastBonus = now;
 
   await ctx.reply(
     `🎁 БОНУС ПОЛУЧЕН!\n\n` +
-    `🪙 +${BONUS_AMOUNT} монет\n` +
-    `💰 Баланс: ${user.balance}`
+    `🪙 +${ECO_BONUS} монет\n` +
+    `💰 Баланс: ${u.balance}`
   );
 });
 
-// 🏆 Топ
-bot.hears(/^!?топ$/iu, async (ctx) => {
+// 💼 РАБОТА
+bot.hears(/^!?работа$/iu, async (ctx) => {
+  const u = ecoUser(ctx);
+  const now = Date.now();
+
+  if (now - u.lastWork < ECO_WORK_CD) {
+    const left = ECO_WORK_CD - (now - u.lastWork);
+
+    return ctx.reply(
+      `⏳ Вы уже работали.\n` +
+      `Следующая работа через: ${ecoTime(left)}`
+    );
+  }
+
+  const reward = Math.floor(Math.random() * 451) + 50;
+
+  u.balance += reward;
+  u.lastWork = now;
+
+  await ctx.reply(
+    `💼 ВЫ ПОРАБОТАЛИ!\n\n` +
+    `🪙 Заработано: +${reward}\n` +
+    `💰 Баланс: ${u.balance}`
+  );
+});
+
+// 🎯 ЗАДАНИЕ
+bot.hears(/^!?задание$/iu, async (ctx) => {
+  const u = ecoUser(ctx);
+  const now = Date.now();
+
+  if (now - u.lastTask < ECO_TASK_CD) {
+    const left = ECO_TASK_CD - (now - u.lastTask);
+
+    return ctx.reply(
+      `⏳ Задание уже выполнено.\n` +
+      `Новое задание через: ${ecoTime(left)}`
+    );
+  }
+
+  const reward = Math.floor(Math.random() * 301) + 200;
+
+  u.balance += reward;
+  u.lastTask = now;
+
+  await ctx.reply(
+    `🎯 ЗАДАНИЕ ВЫПОЛНЕНО!\n\n` +
+    `🪙 Награда: +${reward}\n` +
+    `💰 Баланс: ${u.balance}`
+  );
+});
+
+// 👤 ПРОФИЛЬ
+bot.hears(/^!?профиль$/iu, async (ctx) => {
+  const u = ecoUser(ctx);
+
+  await ctx.reply(
+    `👤 ПРОФИЛЬ\n\n` +
+    `🆔 ID: ${u.id}\n` +
+    `👤 Имя: ${u.name}\n` +
+    `🔗 Username: ${u.username ? "@" + u.username : "нет"}\n\n` +
+    `🪙 Кошелёк: ${u.balance}\n` +
+    `🏦 Банк: ${u.bank}\n` +
+    `💎 Всего: ${u.balance + u.bank}`
+  );
+});
+
+// 🏆 БОГАТЫЕ
+bot.hears(/^!?богатые$/iu, async (ctx) => {
   if (economyUsers.size === 0) {
     return ctx.reply("📊 Пока нет пользователей.");
   }
 
   const top = [...economyUsers.values()]
-    .sort((a, b) => b.balance - a.balance)
+    .sort((a, b) =>
+      (b.balance + b.bank) - (a.balance + a.bank)
+    )
     .slice(0, 10);
 
-  let text = "🏆 ТОП БОГАТЫХ\n\n";
+  let text = "🏆 БОГАТЕЙШИЕ ПОЛЬЗОВАТЕЛИ\n\n";
 
-  top.forEach((user, index) => {
-    text += `${index + 1}. ${economyName(user)} — 🪙 ${user.balance}\n`;
+  top.forEach((u, i) => {
+    text += `${i + 1}. ${ecoName(u)} — 🪙 ${u.balance + u.bank}\n`;
   });
 
   await ctx.reply(text);
 });
 
-// 👤 Профиль
-bot.hears(/^!?профиль$/iu, async (ctx) => {
-  const user = economyGetUser(ctx);
+// 💸 ПЕРЕВОД
+bot.hears(/^!?перевод(?:\s+(\d+))?$/iu, async (ctx) => {
+  const amount = Number(ctx.match?.[1]);
+
+  if (!amount || amount <= 0) {
+    return ctx.reply(
+      `💸 Использование:\n\n` +
+      `Ответьте на сообщение пользователя и напишите:\n` +
+      `Перевод 500`
+    );
+  }
+
+  const target = ctx.message.reply_to_message;
+
+  if (!target?.from) {
+    return ctx.reply(
+      `❗ Ответьте на сообщение пользователя.`
+    );
+  }
+
+  if (target.from.id === ctx.from.id) {
+    return ctx.reply(`❌ Нельзя переводить самому себе.`);
+  }
+
+  const from = ecoUser(ctx);
+  const to = ecoUser({
+    from: target.from
+  });
+
+  if (from.balance < amount) {
+    return ctx.reply(
+      `❌ Недостаточно монет.\n\n` +
+      `💰 У вас: ${from.balance}\n` +
+      `🪙 Нужно: ${amount}`
+    );
+  }
+
+  from.balance -= amount;
+  to.balance += amount;
 
   await ctx.reply(
-    `👤 ПРОФИЛЬ\n\n` +
-    `🆔 ID: ${user.id}\n` +
-    `👤 Имя: ${user.name}\n` +
-    `🔗 Username: ${user.username ? "@" + user.username : "нет"}\n` +
-    `🪙 Монеты: ${user.balance}`
+    `💸 ПЕРЕВОД ВЫПОЛНЕН!\n\n` +
+    `👤 Получатель: ${ecoName(to)}\n` +
+    `🪙 Сумма: ${amount}\n` +
+    `💰 Ваш баланс: ${from.balance}`
   );
 });
 
-// 💼 Работа
-bot.hears(/^!?работа$/iu, async (ctx) => {
-  const user = economyGetUser(ctx);
-
-  const reward = Math.floor(Math.random() * 451) + 50;
-  user.balance += reward;
+// 🏦 БАНК
+bot.hears(/^!?банк$/iu, async (ctx) => {
+  const u = ecoUser(ctx);
 
   await ctx.reply(
-    `💼 ВЫ ПОРАБОТАЛИ!\n\n` +
-    `🪙 Заработано: +${reward}\n` +
-    `💰 Баланс: ${user.balance}`
+    `🏦 ВАШ БАНК\n\n` +
+    `🏦 На счёте: ${u.bank}\n` +
+    `🪙 В кошельке: ${u.balance}`
   );
 });
 
-// 🛒 Магазин
+// 🏦 ПОЛОЖИТЬ В БАНК
+bot.hears(/^!?положить(?:\s+(\d+))?$/iu, async (ctx) => {
+  const amount = Number(ctx.match?.[1]);
+
+  if (!amount || amount <= 0) {
+    return ctx.reply(`❗ Напишите: Положить 500`);
+  }
+
+  const u = ecoUser(ctx);
+
+  if (u.balance < amount) {
+    return ctx.reply(`❌ Недостаточно монет.`);
+  }
+
+  u.balance -= amount;
+  u.bank += amount;
+
+  await ctx.reply(
+    `🏦 Деньги положены в банк.\n\n` +
+    `🪙 +${amount}\n` +
+    `🏦 Банк: ${u.bank}\n` +
+    `💰 Кошелёк: ${u.balance}`
+  );
+});
+
+// 🏦 СНЯТЬ С БАНКА
+bot.hears(/^!?снять(?:\s+(\d+))?$/iu, async (ctx) => {
+  const amount = Number(ctx.match?.[1]);
+
+  if (!amount || amount <= 0) {
+    return ctx.reply(`❗ Напишите: Снять 500`);
+  }
+
+  const u = ecoUser(ctx);
+
+  if (u.bank < amount) {
+    return ctx.reply(`❌ В банке недостаточно монет.`);
+  }
+
+  u.bank -= amount;
+  u.balance += amount;
+
+  await ctx.reply(
+    `🏦 Деньги сняты.\n\n` +
+    `🪙 +${amount}\n` +
+    `🏦 Банк: ${u.bank}\n` +
+    `💰 Кошелёк: ${u.balance}`
+  );
+});
+
+// 🎲 КУБИК
+bot.hears(/^!?кубик(?:\s+(\d+))?$/iu, async (ctx) => {
+  const bet = Number(ctx.match?.[1]);
+
+  if (!bet || bet <= 0) {
+    return ctx.reply(`🎲 Использование: Кубик 100`);
+  }
+
+  const u = ecoUser(ctx);
+
+  if (u.balance < bet) {
+    return ctx.reply(`❌ Недостаточно монет.`);
+  }
+
+  const roll = Math.floor(Math.random() * 6) + 1;
+
+  if (roll >= 4) {
+    u.balance += bet;
+
+    await ctx.reply(
+      `🎲 Выпало: ${roll}\n\n` +
+      `🎉 Вы выиграли +${bet} монет!\n` +
+      `💰 Баланс: ${u.balance}`
+    );
+  } else {
+    u.balance -= bet;
+
+    await ctx.reply(
+      `🎲 Выпало: ${roll}\n\n` +
+      `😔 Вы проиграли ${bet} монет.\n` +
+      `💰 Баланс: ${u.balance}`
+    );
+  }
+});
+
+// 🪙 МОНЕТКА
+bot.hears(/^!?монетка(?:\s+(\d+))?$/iu, async (ctx) => {
+  const bet = Number(ctx.match?.[1]);
+
+  if (!bet || bet <= 0) {
+    return ctx.reply(`🪙 Использование: Монетка 100`);
+  }
+
+  const u = ecoUser(ctx);
+
+  if (u.balance < bet) {
+    return ctx.reply(`❌ Недостаточно монет.`);
+  }
+
+  const win = Math.random() < 0.5;
+  const side = win ? "ОРЁЛ" : "РЕШКА";
+
+  if (win) {
+    u.balance += bet;
+  } else {
+    u.balance -= bet;
+  }
+
+  await ctx.reply(
+    `🪙 Выпало: ${side}\n\n` +
+    `${win ? "🎉 Вы выиграли" : "😔 Вы проиграли"}: ${bet}\n` +
+    `💰 Баланс: ${u.balance}`
+  );
+});
+
+// 🎰 СЛОТ
+bot.hears(/^!?слот(?:\s+(\d+))?$/iu, async (ctx) => {
+  const bet = Number(ctx.match?.[1]);
+
+  if (!bet || bet <= 0) {
+    return ctx.reply(`🎰 Использование: Слот 100`);
+  }
+
+  const u = ecoUser(ctx);
+
+  if (u.balance < bet) {
+    return ctx.reply(`❌ Недостаточно монет.`);
+  }
+
+  const a = Math.floor(Math.random() * 7);
+  const b = Math.floor(Math.random() * 7);
+  const c = Math.floor(Math.random() * 7);
+
+  let win = 0;
+
+  if (a === b && b === c) {
+    win = bet * 5;
+  } else if (a === b || b === c || a === c) {
+    win = bet * 2;
+  }
+
+  u.balance -= bet;
+  u.balance += win;
+
+  await ctx.reply(
+    `🎰 СЛОТ\n\n` +
+    `🎲 ${a} | ${b} | ${c}\n\n` +
+    `${win > 0 ? `🎉 Выигрыш: +${win}` : `😔 Проигрыш: ${bet}`}\n` +
+    `💰 Баланс: ${u.balance}`
+  );
+});
+
+// 🎁 НАГРАДА
+bot.hears(/^!?награда$/iu, async (ctx) => {
+  const u = ecoUser(ctx);
+  const reward = 100;
+
+  u.balance += reward;
+
+  await ctx.reply(
+    `🎁 НАГРАДА\n\n` +
+    `🪙 +${reward} монет\n` +
+    `💰 Баланс: ${u.balance}`
+  );
+});
+
+// 💱 КУРС
+bot.hears(/^!?курс$/iu, async (ctx) => {
+  await ctx.reply(
+    `💱 КУРС ВАЛЮТЫ\n\n` +
+    `🪙 1 монета = 1 единица валюты бота`
+  );
+});
+
+// 🛒 МАГАЗИН
 bot.hears(/^!?магазин$/iu, async (ctx) => {
   await ctx.reply(
     `🛒 МАГАЗИН\n\n` +
     `1️⃣ VIP — 🪙 1000\n` +
-    `2️⃣ Премиум — 🪙 2500\n` +
-    `3️⃣ Легенда — 🪙 5000\n\n` +
-    `Для покупки используйте: Купить 1`
+    `2️⃣ ПРЕМИУМ — 🪙 2500\n` +
+    `3️⃣ ЛЕГЕНДА — 🪙 5000\n\n` +
+    `Купить 1\n` +
+    `Купить 2\n` +
+    `Купить 3`
   );
 });
 
-// 🛍 Купить
-bot.hears(/^!?купить(?:\s+([123]))?$/iu, async (ctx) => {
-  const item = ctx.match?.[1];
-
-  if (!item) {
-    return ctx.reply(
-      `🛒 Выберите товар:\n\n` +
-      `Купить 1 — VIP — 🪙 1000\n` +
-      `Купить 2 — Премиум — 🪙 2500\n` +
-      `Купить 3 — Легенда — 🪙 5000`
-    );
-  }
+// 🛍 КУПИТЬ
+bot.hears(/^!?купить\s+([123])$/iu, async (ctx) => {
+  const item = ctx.match[1];
 
   const prices = {
     "1": 1000,
@@ -977,83 +1261,56 @@ bot.hears(/^!?купить(?:\s+([123]))?$/iu, async (ctx) => {
 
   const names = {
     "1": "VIP",
-    "2": "Премиум",
-    "3": "Легенда"
+    "2": "ПРЕМИУМ",
+    "3": "ЛЕГЕНДА"
   };
 
-  const user = economyGetUser(ctx);
+  const u = ecoUser(ctx);
   const price = prices[item];
 
-  if (user.balance < price) {
+  if (u.balance < price) {
     return ctx.reply(
-      `❌ Недостаточно монет.\n` +
-      `Нужно: ${price}\n` +
-      `У вас: ${user.balance}`
+      `❌ Недостаточно монет.\n\n` +
+      `💰 У вас: ${u.balance}\n` +
+      `🪙 Нужно: ${price}`
     );
   }
 
-  user.balance -= price;
+  u.balance -= price;
 
   await ctx.reply(
-    `✅ Покупка успешна!\n\n` +
+    `✅ ПОКУПКА УСПЕШНА!\n\n` +
     `🎁 Товар: ${names[item]}\n` +
-    `🪙 Потрачено: ${price}\n` +
-    `💰 Остаток: ${user.balance}`
+    `🪙 Цена: ${price}\n` +
+    `💰 Баланс: ${u.balance}`
   );
 });
 
-// 💸 Кошелёк
-bot.hears(/^!?кошелёк$/iu, async (ctx) => {
-  const user = economyGetUser(ctx);
-
-  await ctx.reply(
-    `👛 КОШЕЛЁК\n\n` +
-    `🪙 ${user.balance} монет`
-  );
-});
-
-// 🎯 Награда
-bot.hears(/^!?награда$/iu, async (ctx) => {
-  const user = economyGetUser(ctx);
-  const reward = 100;
-
-  user.balance += reward;
-
-  await ctx.reply(
-    `🎯 НАГРАДА\n\n` +
-    `🪙 +${reward} монет\n` +
-    `💰 Баланс: ${user.balance}`
-  );
-});
-
-// 💱 Курс
-bot.hears(/^!?курс$/iu, async (ctx) => {
-  await ctx.reply(
-    `💱 КУРС ВАЛЮТЫ\n\n` +
-    `🪙 1 монета = 1 единица валюты бота`
-  );
-});
-
-// ℹ️ Помощь
+// 🆘 ПОМОЩЬ
 bot.hears(/^!?помощь$/iu, async (ctx) => {
   await ctx.reply(
-    `📚 КОМАНДЫ БОТА\n\n` +
-    `💰 Баланс — ваш баланс\n` +
-    `🎁 Бонус — бонус раз в 24 часа\n` +
-    `🏆 Топ — рейтинг игроков\n` +
-    `👤 Профиль — ваш профиль\n` +
-    `💼 Работа — заработать монеты\n` +
-    `🛒 Магазин — магазин\n` +
-    `🛍 Купить 1/2/3 — покупка\n` +
-    `👛 Кошелёк — ваш кошелёк\n` +
-    `🎯 Награда — получить награду\n` +
-    `🪙 Монеты — количество монет\n` +
-    `💱 Курс — курс валюты\n` +
-    `ℹ️ Помощь — список команд`
+    `📚 ЭКОНОМИКА 8-A\n\n` +
+    `💰 Баланс\n` +
+    `🎁 Бонус\n` +
+    `💼 Работа\n` +
+    `🎯 Задание\n` +
+    `👤 Профиль\n` +
+    `🏆 Богатые\n` +
+    `💸 Перевод 500 — reply\n` +
+    `🏦 Банк\n` +
+    `Положить 500\n` +
+    `Снять 500\n` +
+    `🎲 Кубик 100\n` +
+    `🪙 Монетка 100\n` +
+    `🎰 Слот 100\n` +
+    `🛒 Магазин\n` +
+    `Купить 1\n` +
+    `🎁 Награда\n` +
+    `💱 Курс`
   );
 });
 
-// 🖥 ОКНО С КНОПКАМИ
+// 🖥 ОКНО ECONOMY
 bot.hears(/^!?экономика$/iu, async (ctx) => {
   await ctx.reply(
     `💎 ЭКОНОМИКА 8-A\n\n` +
@@ -1066,12 +1323,20 @@ bot.hears(/^!?экономика$/iu, async (ctx) => {
             { text: "🎁 Бонус", callback_data: "eco_bonus" }
           ],
           [
-            { text: "🏆 Топ", callback_data: "eco_top" },
+            { text: "💼 Работа", callback_data: "eco_work" },
+            { text: "🎯 Задание", callback_data: "eco_task" }
+          ],
+          [
+            { text: "🏆 Богатые", callback_data: "eco_rich" },
             { text: "👤 Профиль", callback_data: "eco_profile" }
           ],
           [
-            { text: "💼 Работа", callback_data: "eco_work" },
-            { text: "🛒 Магазин", callback_data: "eco_shop" }
+            { text: "🎲 Кубик", callback_data: "eco_dice" },
+            { text: "🪙 Монетка", callback_data: "eco_coin" }
+          ],
+          [
+            { text: "🛒 Магазин", callback_data: "eco_shop" },
+            { text: "🏦 Банк", callback_data: "eco_bank" }
           ]
         ]
       }
@@ -1080,81 +1345,126 @@ bot.hears(/^!?экономика$/iu, async (ctx) => {
 });
 
 bot.action("eco_balance", async (ctx) => {
-  const user = economyGetUser(ctx);
+  const u = ecoUser(ctx);
 
   await ctx.answerCbQuery();
 
   await ctx.reply(
-    `💰 Ваш баланс: 🪙 ${user.balance}`
+    `💰 Баланс: ${u.balance}\n🏦 Банк: ${u.bank}`
   );
 });
 
 bot.action("eco_bonus", async (ctx) => {
-  const user = economyGetUser(ctx);
+  const u = ecoUser(ctx);
   const now = Date.now();
 
-  if (now - user.lastBonus < BONUS_COOLDOWN) {
-    const left = BONUS_COOLDOWN - (now - user.lastBonus);
-    const hours = Math.floor(left / 3600000);
-    const minutes = Math.floor((left % 3600000) / 60000);
+  if (now - u.lastBonus < ECO_BONUS_CD) {
+    const left = ECO_BONUS_CD - (now - u.lastBonus);
 
     return ctx.answerCbQuery(
-      `⏳ Через ${hours} ч. ${minutes} мин.`,
+      `⏳ Через ${ecoTime(left)}`,
       { show_alert: true }
     );
   }
 
-  user.balance += BONUS_AMOUNT;
-  user.lastBonus = now;
+  u.balance += ECO_BONUS;
+  u.lastBonus = now;
 
   await ctx.answerCbQuery(
-    `🎁 +${BONUS_AMOUNT} монет!`
+    `🎁 +${ECO_BONUS} монет!`
   );
 
   await ctx.reply(
-    `🎁 Бонус получен!\n🪙 +${BONUS_AMOUNT}\n💰 Баланс: ${user.balance}`
+    `🎁 Бонус получен!\n🪙 +${ECO_BONUS}\n💰 Баланс: ${u.balance}`
   );
 });
 
-bot.action("eco_top", async (ctx) => {
+bot.action("eco_work", async (ctx) => {
+  const u = ecoUser(ctx);
+  const now = Date.now();
+
+  if (now - u.lastWork < ECO_WORK_CD) {
+    return ctx.answerCbQuery(
+      `⏳ Следующая работа через ${ecoTime(ECO_WORK_CD - (now - u.lastWork))}`,
+      { show_alert: true }
+    );
+  }
+
+  const reward = Math.floor(Math.random() * 451) + 50;
+
+  u.balance += reward;
+  u.lastWork = now;
+
+  await ctx.answerCbQuery(`💼 +${reward} монет!`);
+
+  await ctx.reply(
+    `💼 Вы заработали +${reward} монет!\n💰 Баланс: ${u.balance}`
+  );
+});
+
+bot.action("eco_task", async (ctx) => {
+  const u = ecoUser(ctx);
+  const now = Date.now();
+
+  if (now - u.lastTask < ECO_TASK_CD) {
+    return ctx.answerCbQuery(
+      `⏳ Через ${ecoTime(ECO_TASK_CD - (now - u.lastTask))}`,
+      { show_alert: true }
+    );
+  }
+
+  const reward = Math.floor(Math.random() * 301) + 200;
+
+  u.balance += reward;
+  u.lastTask = now;
+
+  await ctx.answerCbQuery(`🎯 +${reward} монет!`);
+
+  await ctx.reply(
+    `🎯 Задание выполнено!\n🪙 +${reward}\n💰 Баланс: ${u.balance}`
+  );
+});
+
+bot.action("eco_rich", async (ctx) => {
   await ctx.answerCbQuery();
 
   const top = [...economyUsers.values()]
-    .sort((a, b) => b.balance - a.balance)
+    .sort((a, b) =>
+      (b.balance + b.bank) - (a.balance + a.bank)
+    )
     .slice(0, 10);
 
-  let text = "🏆 ТОП БОГАТЫХ\n\n";
+  let text = "🏆 БОГАТЕЙШИЕ\n\n";
 
-  top.forEach((user, index) => {
-    text += `${index + 1}. ${economyName(user)} — 🪙 ${user.balance}\n`;
+  top.forEach((u, i) => {
+    text += `${i + 1}. ${ecoName(u)} — 🪙 ${u.balance + u.bank}\n`;
   });
 
   await ctx.reply(text);
 });
 
 bot.action("eco_profile", async (ctx) => {
-  const user = economyGetUser(ctx);
+  const u = ecoUser(ctx);
 
   await ctx.answerCbQuery();
 
   await ctx.reply(
     `👤 ПРОФИЛЬ\n\n` +
-    `🆔 ID: ${user.id}\n` +
-    `👤 Имя: ${user.name}\n` +
-    `🪙 Монеты: ${user.balance}`
+    `👤 ${ecoName(u)}\n` +
+    `🪙 Кошелёк: ${u.balance}\n` +
+    `🏦 Банк: ${u.bank}`
   );
 });
 
-bot.action("eco_work", async (ctx) => {
-  const user = economyGetUser(ctx);
-  const reward = Math.floor(Math.random() * 451) + 50;
+bot.action("eco_dice", async (ctx) => {
+  await ctx.answerCbQuery(
+    "🎲 Используйте: Кубик 100"
+  );
+});
 
-  user.balance += reward;
-
-  await ctx.answerCbQuery(`💼 +${reward} монет!`);
-
-  await ctx.reply(
-    `💼 Работа выполнена!\n🪙 +${reward}\n💰 Баланс: ${user.balance}`
+bot.action("eco_coin", async (ctx) => {
+  await ctx.answerCbQuery(
+    "🪙 Используйте: Монетка 100"
   );
 });
 
@@ -1163,10 +1473,22 @@ bot.action("eco_shop", async (ctx) => {
 
   await ctx.reply(
     `🛒 МАГАЗИН\n\n` +
-    `1️⃣ VIP — 🪙 1000\n` +
-    `2️⃣ Премиум — 🪙 2500\n` +
-    `3️⃣ Легенда — 🪙 5000\n\n` +
-    `Напишите: Купить 1`
+    `1️⃣ VIP — 1000\n` +
+    `2️⃣ ПРЕМИУМ — 2500\n` +
+    `3️⃣ ЛЕГЕНДА — 5000\n\n` +
+    `Купить 1 / 2 / 3`
+  );
+});
+
+bot.action("eco_bank", async (ctx) => {
+  const u = ecoUser(ctx);
+
+  await ctx.answerCbQuery();
+
+  await ctx.reply(
+    `🏦 БАНК\n\n` +
+    `🏦 На счёте: ${u.bank}\n` +
+    `🪙 Кошелёк: ${u.balance}`
   );
 });
 
