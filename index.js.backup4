@@ -10,40 +10,11 @@ function owner(ctx) {
   return String(ctx.from?.id) === String(OWNER_ID);
 }
 
-async function isAdmin(ctx) {
-  if (owner(ctx)) return true;
-
-  if (
-    ctx.chat?.type !== "group" &&
-    ctx.chat?.type !== "supergroup"
-  ) {
-    return false;
-  }
-
-  try {
-    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
-
-    return admins.some(
-      admin => Number(admin.user.id) === Number(ctx.from?.id)
-    );
-  } catch (error) {
-    console.error("ADMIN CHECK ERROR:", error);
-    return false;
-  }
-}
-
-async function requireAdmin(ctx) {
-  if (await isAdmin(ctx)) return true;
-
-  await ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  return false;
-}
-
 // ====================
 // !старт
 // ====================
 bot.hears(/^!?старт$/i, async (ctx) => {
-  
+  if (!owner(ctx)) return ctx.reply("⛔ Доступ запрещён.");
 
   await ctx.reply(
     "🔥 8-A ADMIN BOT 🔥\n\n" +
@@ -69,7 +40,7 @@ bot.hears(/^!?мойид$/i, (ctx) => {
 // !панель
 // ====================
 bot.hears(/^!?панель$/i, async (ctx) => {
-  
+  if (!owner(ctx)) return ctx.reply("⛔ Доступ запрещён.");
 
   await ctx.reply(
     "👑 ПАНЕЛЬ АДМИНИСТРАТОРА\n\n" +
@@ -83,9 +54,7 @@ bot.hears(/^!?панель$/i, async (ctx) => {
 // !админы
 // ====================
 bot.hears(/^!?админы$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
+  if (!owner(ctx)) return ctx.reply("⛔ Доступ запрещён.");
 
   if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
     return ctx.reply("❗ Эту команду нужно использовать в группе.");
@@ -130,9 +99,7 @@ bot.hears(/^!?админы$/i, async (ctx) => {
 // Только REPLY
 // ====================
 bot.hears(/^!?бан$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
+  if (!owner(ctx)) return ctx.reply("⛔ Доступ запрещён.");
 
   if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
     return ctx.reply("❗ !бан работает только в группе.");
@@ -184,74 +151,12 @@ bot.hears(/^!?бан$/i, async (ctx) => {
   }
 });
 
-
-// ====================
-// BAN / !BAN
-// ====================
-
-bot.hears(/^!?ban$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
-
-  if (
-    ctx.chat.type !== "group" &&
-    ctx.chat.type !== "supergroup"
-  ) {
-    return ctx.reply("❗ Эту команду нужно использовать в группе.");
-  }
-
-  const target = ctx.message.reply_to_message;
-
-  if (!target?.from) {
-    return ctx.reply(
-      "❗ Ответьте на сообщение пользователя и напишите ban."
-    );
-  }
-
-  const userId = Number(target.from.id);
-
-  if (userId === OWNER_ID) {
-    return ctx.reply("❌ Владелец защищён от блокировки.");
-  }
-
-  try {
-    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
-
-    const isTargetAdmin = admins.some(
-      admin => Number(admin.user.id) === userId
-    );
-
-    if (isTargetAdmin) {
-      return ctx.reply("❌ Нельзя заблокировать администратора.");
-    }
-
-    await ctx.telegram.banChatMember(
-      ctx.chat.id,
-      userId
-    );
-
-    await ctx.reply(
-      `🚫 ${target.from.first_name || "Пользователь"} заблокирован.`
-    );
-
-  } catch (error) {
-    console.error("BAN ERROR:", error);
-    await ctx.reply(
-      "❌ Не удалось заблокировать пользователя.\n\n" +
-      "Проверьте права бота в группе."
-    );
-  }
-});
-
 // ====================
 // !разбан
 // Только REPLY
 // ====================
 bot.hears(/^!?разбан$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
+  if (!owner(ctx)) return ctx.reply("⛔ Доступ запрещён.");
 
   if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
     return ctx.reply("❗ !разбан работает только в группе.");
@@ -287,9 +192,7 @@ bot.hears(/^!?разбан$/i, async (ctx) => {
 // Удаляет REPLY-сообщение
 // ====================
 bot.hears(/^!?удалить$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
+  if (!owner(ctx)) return ctx.reply("⛔ Доступ запрещён.");
 
   if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
     return ctx.reply("❗ !удалить работает только в группе.");
@@ -325,9 +228,7 @@ bot.hears(/^!?удалить$/i, async (ctx) => {
 // ====================
 
 bot.hears(/^!?мут(?:\s+(\d+))?$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
+  if (!owner(ctx)) return ctx.reply("⛔ Доступ запрещён.");
 
   if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
     return ctx.reply("❗ Эту команду нужно использовать в группе.");
@@ -409,9 +310,7 @@ bot.hears(/^!?мут(?:\s+(\d+))?$/i, async (ctx) => {
 // ====================
 
 bot.hears(/^!?размут$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
+  if (!owner(ctx)) return ctx.reply("⛔ Доступ запрещён.");
 
   if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
     return ctx.reply("❗ Эту команду нужно использовать в группе.");
@@ -461,9 +360,7 @@ bot.hears(/^!?размут$/i, async (ctx) => {
 // ====================
 
 bot.hears(/^!?инфо$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
+  if (!owner(ctx)) return ctx.reply("⛔ Доступ запрещён.");
 
   const target = ctx.message.reply_to_message;
 
@@ -582,8 +479,8 @@ bot.on("message", (ctx, next) => {
 
 // !топ
 bot.hears(/^!?топ$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
+  if (!owner(ctx)) {
+    return ctx.reply("⛔ Доступ запрещён.");
   }
 
   if (ctx.chat.type === "private") {
