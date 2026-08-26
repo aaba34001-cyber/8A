@@ -4,43 +4,28 @@ const { Telegraf } = require("telegraf");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-const OWNER_ID = 8480297110;
+const OWNER_ID = Number(process.env.OWNER_ID || 8480297110);
 
-async function owner(ctx) {
-  if (!ctx.from) return false;
+// ============================
+// YORDAMCHI FUNKSIYALAR
+// ============================
 
-  // Bot egasi
-  if (String(ctx.from.id) === String(OWNER_ID)) {
-    return true;
-  }
-
-  // Faqat guruhda adminlarni tekshiramiz
-  if (
-    ctx.chat?.type !== "group" &&
-    ctx.chat?.type !== "supergroup"
-  ) {
-    return false;
-  }
-
-  try {
-    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
-
-    return admins.some(
-      admin => String(admin.user.id) === String(ctx.from.id)
-    );
-  } catch (error) {
-    console.error("ADMIN CHECK ERROR:", error);
-    return false;
-  }
+function isGroup(ctx) {
+  return (
+    ctx.chat &&
+    (ctx.chat.type === "group" || ctx.chat.type === "supergroup")
+  );
 }
 
 async function isAdmin(ctx) {
-  if (owner(ctx)) return true;
+  if (!ctx.from) return false;
 
-  if (
-    ctx.chat?.type !== "group" &&
-    ctx.chat?.type !== "supergroup"
-  ) {
+  // Bot egasi
+  if (Number(ctx.from.id) === OWNER_ID) {
+    return true;
+  }
+
+  if (!isGroup(ctx)) {
     return false;
   }
 
@@ -48,7 +33,7 @@ async function isAdmin(ctx) {
     const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
 
     return admins.some(
-      admin => Number(admin.user.id) === Number(ctx.from?.id)
+      admin => Number(admin.user.id) === Number(ctx.from.id)
     );
   } catch (error) {
     console.error("ADMIN CHECK ERROR:", error);
@@ -57,77 +42,327 @@ async function isAdmin(ctx) {
 }
 
 async function requireAdmin(ctx) {
-  if (await isAdmin(ctx)) return true;
-
-  await ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  return false;
-}
-
-// ====================
-// !старт
-// ====================
-bot.hears(/^!?старт$/i, async (ctx) => {
-  
-
-  await ctx.reply(
-    "🔥 8-A ADMIN BOT 🔥\n\n" +
-    "👑 Владелец: СКРЫТ\n" +
-    "🛡 Модерация: ВКЛ\n\n" +
-    "!панель — Панель администратора\n" +
-    "!админы — Администраторы\n" +
-    "!бан — Заблокировать пользователя\n" +
-    "!разбан — Разблокировать пользователя\n" +
-    "!удалить — Удалить сообщение\n" +
-    "!мойид — Ваш ID"
-  );
-});
-
-// ====================
-// !мойид
-// ====================
-bot.hears(/^!?мойид$/i, (ctx) => {
-  ctx.reply(`Ваш ID: ${ctx.from.id}`);
-});
-
-// ====================
-// !панель
-// ====================
-bot.hears(/^!?панель$/i, async (ctx) => {
-  
-
-  await ctx.reply(
-    "👑 ПАНЕЛЬ АДМИНИСТРАТОРА\n\n" +
-    "🟢 Бот: ОНЛАЙН\n" +
-    "🔐 Владелец: СКРЫТ\n" +
-    "🛡 Модерация: ВКЛ"
-  );
-});
-
-// ====================
-// !админы
-// ====================
-bot.hears(/^!?админы$/i, async (ctx) => {
   if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
+    await ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
+    return false;
   }
 
-  if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
-    return ctx.reply("❗ Эту команду нужно использовать в группе.");
+  return true;
+}
+
+// ============================
+// TOP 24 SOAT
+// ============================
+
+const messageStats = new Map();
+
+bot.on("message", async (ctx, next) => {
+  try {
+    if (!ctx.from || ctx.from.is_bot) {
+      return next();
+    }
+
+    if (!isGroup(ctx)) {
+      return next();
+    }
+
+    const text =
+      ctx.message?.text ||
+      ctx.message?.caption ||
+      "";
+
+    // Buyruqlar TOP hisobiga kirmaydi
+    const command = text.trim().toLowerCase();
+
+    const commands = [
+      "топ",
+      "!топ",
+      "инфо",
+      "!инфо",
+      "мойид",
+      "!мойид",
+      "помощь",
+      "!помощь",
+      "админы",
+      "!админы",
+      "панель",
+      "!панель",
+      "бан",
+      "!бан",
+      "мут",
+      "!мут",
+      "разбан",
+      "!разбан",
+      "кик",
+      "!кик",
+      "удалить",
+      "!удалить",
+      "старт",
+      "!старт",
+      "статистика",
+      "!статистика"
+    ];
+
+    if (commands.includes(command)) {
+      return next();
+    }
+
+    const now = Date.now();
+    const limit = now - 24 * 60 * 60 * 1000;
+
+    const chatId = ctx.chat.id;
+    const userId = ctx.from.id;
+
+    if (!messageStats.has(chatId)) {
+      messageStats.set(chatId, new Map());
+    }
+
+    const chatStats = messageStats.get(chatId);
+
+    if (!chatStats.has(userId)) {
+      chatStats.set(userId, {
+        times: [],
+        username: ctx.from.username || null,
+        name: ctx.from.first_name || "Пользователь"
+      });
+    }
+
+    const user = chatStats.get(userId);
+
+    user.times.push(now);
+
+    user.times = user.times.filter(
+      time => time >= limit
+    );
+
+    user.username =
+      ctx.from.username || user.username;
+
+    user.name =
+      ctx.from.first_name || user.name;
+
+  } catch (error) {
+    console.error("STATS ERROR:", error);
+  }
+
+  return next();
+});
+
+// ============================
+// СТАРТ
+// Oddiy user ham ko'ra oladi
+// ============================
+
+bot.hears(/^!?старт$/i, async (ctx) => {
+  await ctx.reply(
+    "🔥 8-A ADMIN BOT 🔥\n\n" +
+    "👤 Информационные команды:\n" +
+    "топ — ТОП за 24 часа\n" +
+    "инфо — информация о пользователе\n" +
+    "мойид — ваш ID\n" +
+    "статистика — статистика группы\n" +
+    "помощь — список команд\n\n" +
+    "👑 Команды администраторов:\n" +
+    "бан — заблокировать\n" +
+    "мут — ограничить сообщения\n" +
+    "разбан — разблокировать\n" +
+    "кик — удалить из группы\n" +
+    "удалить — удалить сообщение\n" +
+    "админы — список администраторов"
+  );
+});
+
+// ============================
+// ПОМОЩЬ
+// Oddiy user
+// ============================
+
+bot.hears(/^!?помощь$/i, async (ctx) => {
+  await ctx.reply(
+    "📚 ДОСТУПНЫЕ КОМАНДЫ\n\n" +
+    "👤 Для всех:\n" +
+    "топ\n" +
+    "инфо\n" +
+    "мойид\n" +
+    "статистика\n" +
+    "помощь\n\n" +
+    "👑 Для администраторов:\n" +
+    "бан\n" +
+    "мут\n" +
+    "разбан\n" +
+    "кик\n" +
+    "удалить\n" +
+    "админы\n" +
+    "панель\n\n" +
+    "ℹ️ Ответьте на сообщение пользователя для команд модерации."
+  );
+});
+
+// ============================
+// МОЙ ID
+// Oddiy user
+// ============================
+
+bot.hears(/^!?мойид$/i, async (ctx) => {
+  await ctx.reply(`🆔 Ваш ID: ${ctx.from.id}`);
+});
+
+// ============================
+// TOP
+// Oddiy user ham ishlata oladi
+// ============================
+
+bot.hears(/^!?топ$/i, async (ctx) => {
+  if (!isGroup(ctx)) {
+    return ctx.reply("❗ Команда работает только в группе.");
+  }
+
+  const chatStats = messageStats.get(ctx.chat.id);
+
+  if (!chatStats || chatStats.size === 0) {
+    return ctx.reply(
+      "📊 За последние 24 часа сообщений пока нет."
+    );
+  }
+
+  const now = Date.now();
+  const limit = now - 24 * 60 * 60 * 1000;
+
+  const top = [];
+
+  for (const [userId, user] of chatStats) {
+    user.times = user.times.filter(
+      time => time >= limit
+    );
+
+    if (user.times.length > 0) {
+      top.push({
+        id: userId,
+        count: user.times.length,
+        username: user.username,
+        name: user.name
+      });
+    }
+  }
+
+  top.sort((a, b) => b.count - a.count);
+
+  if (top.length === 0) {
+    return ctx.reply(
+      "📊 За последние 24 часа сообщений пока нет."
+    );
+  }
+
+  let text = "🏆 ТОП ЗА 24 ЧАСА\n\n";
+
+  top.slice(0, 10).forEach((user, index) => {
+    const name = user.username
+      ? `@${user.username}`
+      : user.name;
+
+    text += `${index + 1}. ${name} — ${user.count} сообщений\n`;
+  });
+
+  await ctx.reply(text);
+});
+
+// ============================
+// СТАТИСТИКА
+// Oddiy user
+// ============================
+
+bot.hears(/^!?статистика$/i, async (ctx) => {
+  if (!isGroup(ctx)) {
+    return ctx.reply(
+      "❗ Команда работает только в группе."
+    );
+  }
+
+  const chatStats = messageStats.get(ctx.chat.id);
+
+  if (!chatStats) {
+    return ctx.reply(
+      "📊 Пока статистики нет."
+    );
+  }
+
+  let total = 0;
+
+  const limit =
+    Date.now() - 24 * 60 * 60 * 1000;
+
+  for (const user of chatStats.values()) {
+    user.times = user.times.filter(
+      time => time >= limit
+    );
+
+    total += user.times.length;
+  }
+
+  await ctx.reply(
+    "📊 СТАТИСТИКА ЗА 24 ЧАСА\n\n" +
+    `💬 Сообщений: ${total}\n` +
+    `👥 Активных пользователей: ${chatStats.size}`
+  );
+});
+
+// ============================
+// ИНФОРМАЦИЯ О USER
+// Oddiy user
+// Reply orqali
+// ============================
+
+bot.hears(/^!?инфо$/i, async (ctx) => {
+  const target = ctx.message.reply_to_message?.from || ctx.from;
+
+  if (!target) {
+    return ctx.reply(
+      "❗ Ответьте на сообщение пользователя и напишите инфо."
+    );
+  }
+
+  await ctx.reply(
+    "👤 ИНФОРМАЦИЯ О ПОЛЬЗОВАТЕЛЕ\n\n" +
+    `🆔 ID: ${target.id}\n` +
+    `👤 Имя: ${target.first_name || "Не указано"}\n` +
+    `🔗 Username: ${
+      target.username ? "@" + target.username : "Нет"
+    }\n` +
+    `🤖 Bot: ${target.is_bot ? "Да" : "Нет"}`
+  );
+});
+
+// ============================
+// АДМИНЫ
+// FAQ / INFO - faqat admin
+// ============================
+
+bot.hears(/^!?админы$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+
+  if (!isGroup(ctx)) {
+    return ctx.reply(
+      "❗ Эту команду нужно использовать в группе."
+    );
   }
 
   try {
-    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
+    const admins =
+      await ctx.telegram.getChatAdministrators(
+        ctx.chat.id
+      );
 
-    let text = "👑 АДМИНИСТРАТОРЫ ГРУППЫ\n\n";
+    let text =
+      "👑 АДМИНИСТРАТОРЫ ГРУППЫ\n\n";
+
     let number = 1;
 
     for (const admin of admins) {
       const user = admin.user;
 
-      // ВЛАДЕЛЕЦ СКРЫТ
-      if (Number(user.id) === OWNER_ID) continue;
-
-      text += `${number}. ${user.first_name || "Пользователь"}`;
+      text += `${number}. ${
+        user.first_name || "Пользователь"
+      }`;
 
       if (user.username) {
         text += ` (@${user.username})`;
@@ -137,53 +372,78 @@ bot.hears(/^!?админы$/i, async (ctx) => {
       number++;
     }
 
-    if (number === 1) {
-      text += "Других администраторов нет.";
-    }
-
     await ctx.reply(text);
-
   } catch (error) {
     console.error("ADMINS ERROR:", error);
-    await ctx.reply("❌ Не удалось получить список администраторов.");
+
+    await ctx.reply(
+      "❌ Не удалось получить список администраторов."
+    );
   }
 });
 
-// ====================
-// !бан
-// Только REPLY
-// ====================
-bot.hears(/^!?бан$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
+// ============================
+// ПАНЕЛЬ
+// Admin
+// ============================
 
-  if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
-    return ctx.reply("❗ !бан работает только в группе.");
+bot.hears(/^!?панель$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+
+  await ctx.reply(
+    "👑 ПАНЕЛЬ АДМИНИСТРАТОРА\n\n" +
+    "🟢 Бот: ОНЛАЙН\n" +
+    "🛡 Модерация: ВКЛ\n\n" +
+    "бан — блокировка\n" +
+    "мут — ограничение\n" +
+    "разбан — разблокировка\n" +
+    "кик — удалить из группы\n" +
+    "удалить — удалить сообщение"
+  );
+});
+
+// ============================
+// БАН
+// Faqat admin
+// ============================
+
+bot.hears(/^!?бан$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+
+  if (!isGroup(ctx)) {
+    return ctx.reply(
+      "❗ Команда работает только в группе."
+    );
   }
 
   const target = ctx.message.reply_to_message;
 
   if (!target?.from) {
     return ctx.reply(
-      "❗ Ответьте на сообщение пользователя и напишите !бан."
+      "❗ Ответьте на сообщение пользователя и напишите бан."
     );
   }
 
   const userId = Number(target.from.id);
 
   if (userId === OWNER_ID) {
-    return ctx.reply("❌ Владелец защищён от блокировки.");
+    return ctx.reply(
+      "❌ Владелец защищён от блокировки."
+    );
   }
 
   try {
-    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
+    const admins =
+      await ctx.telegram.getChatAdministrators(
+        ctx.chat.id
+      );
 
-    const isAdmin = admins.some(
-      (admin) => Number(admin.user.id) === userId
+    const targetIsAdmin = admins.some(
+      admin =>
+        Number(admin.user.id) === userId
     );
 
-    if (isAdmin) {
+    if (targetIsAdmin) {
       return ctx.reply(
         "❌ Нельзя заблокировать администратора группы."
       );
@@ -195,97 +455,123 @@ bot.hears(/^!?бан$/i, async (ctx) => {
     );
 
     await ctx.reply(
-      `🚫 ${target.from.first_name || "Пользователь"} заблокирован.`
+      `🚫 ${
+        target.from.first_name || "Пользователь"
+      } заблокирован.`
     );
-
   } catch (error) {
     console.error("BAN ERROR:", error);
 
     await ctx.reply(
       "❌ Не удалось заблокировать пользователя.\n\n" +
-      "Проверьте права бота в группе."
+      "Проверьте права бота."
     );
   }
 });
 
+// ============================
+// МУТ 1 МИНУТА
+// Faqat admin
+// ============================
 
-// ====================
-// BAN / !BAN
-// ====================
+bot.hears(/^!?мут$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
 
-bot.hears(/^!?ban$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
-
-  if (
-    ctx.chat.type !== "group" &&
-    ctx.chat.type !== "supergroup"
-  ) {
-    return ctx.reply("❗ Эту команду нужно использовать в группе.");
+  if (!isGroup(ctx)) {
+    return ctx.reply(
+      "❗ Команда работает только в группе."
+    );
   }
 
   const target = ctx.message.reply_to_message;
 
   if (!target?.from) {
     return ctx.reply(
-      "❗ Ответьте на сообщение пользователя и напишите ban."
+      "❗ Ответьте на сообщение пользователя и напишите мут."
     );
   }
 
   const userId = Number(target.from.id);
 
   if (userId === OWNER_ID) {
-    return ctx.reply("❌ Владелец защищён от блокировки.");
+    return ctx.reply(
+      "❌ Владелец защищён от ограничений."
+    );
   }
 
   try {
-    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
+    const admins =
+      await ctx.telegram.getChatAdministrators(
+        ctx.chat.id
+      );
 
-    const isTargetAdmin = admins.some(
-      admin => Number(admin.user.id) === userId
+    const targetIsAdmin = admins.some(
+      admin =>
+        Number(admin.user.id) === userId
     );
 
-    if (isTargetAdmin) {
-      return ctx.reply("❌ Нельзя заблокировать администратора.");
+    if (targetIsAdmin) {
+      return ctx.reply(
+        "❌ Нельзя ограничить администратора группы."
+      );
     }
 
-    await ctx.telegram.banChatMember(
+    const until =
+      Math.floor(Date.now() / 1000) + 60;
+
+    await ctx.telegram.restrictChatMember(
       ctx.chat.id,
-      userId
+      userId,
+      {
+        permissions: {
+          can_send_messages: false,
+          can_send_audios: false,
+          can_send_documents: false,
+          can_send_photos: false,
+          can_send_videos: false,
+          can_send_video_notes: false,
+          can_send_voice_notes: false,
+          can_send_polls: false,
+          can_send_other_messages: false,
+          can_add_web_page_previews: false
+        },
+        until_date: until
+      }
     );
 
     await ctx.reply(
-      `🚫 ${target.from.first_name || "Пользователь"} заблокирован.`
+      `🔇 ${
+        target.from.first_name || "Пользователь"
+      } получил мут на 1 минуту.`
     );
-
   } catch (error) {
-    console.error("BAN ERROR:", error);
+    console.error("MUTE ERROR:", error);
+
     await ctx.reply(
-      "❌ Не удалось заблокировать пользователя.\n\n" +
-      "Проверьте права бота в группе."
+      "❌ Не удалось выдать мут. Проверьте права бота."
     );
   }
 });
 
-// ====================
-// !разбан
-// Только REPLY
-// ====================
-bot.hears(/^!?разбан$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
+// ============================
+// РАЗБАН
+// Faqat admin
+// ============================
 
-  if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
-    return ctx.reply("❗ !разбан работает только в группе.");
+bot.hears(/^!?разбан$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+
+  if (!isGroup(ctx)) {
+    return ctx.reply(
+      "❗ Команда работает только в группе."
+    );
   }
 
   const target = ctx.message.reply_to_message;
 
   if (!target?.from) {
     return ctx.reply(
-      "❗ Ответьте на сообщение пользователя и напишите !разбан."
+      "❗ Ответьте на сообщение пользователя и напишите разбан."
     );
   }
 
@@ -298,32 +584,114 @@ bot.hears(/^!?разбан$/i, async (ctx) => {
       }
     );
 
-    await ctx.reply("✅ Пользователь разблокирован.");
-
+    await ctx.reply(
+      "✅ Пользователь разблокирован."
+    );
   } catch (error) {
     console.error("UNBAN ERROR:", error);
-    await ctx.reply("❌ Не удалось разблокировать пользователя.");
+
+    await ctx.reply(
+      "❌ Не удалось разблокировать пользователя."
+    );
   }
 });
 
-// ====================
-// !удалить
-// Удаляет REPLY-сообщение
-// ====================
-bot.hears(/^!?удалить$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
+// ============================
+// КИК
+// Faqat admin
+// ============================
 
-  if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
-    return ctx.reply("❗ !удалить работает только в группе.");
+bot.hears(/^!?кик$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+
+  if (!isGroup(ctx)) {
+    return ctx.reply(
+      "❗ Команда работает только в группе."
+    );
   }
 
   const target = ctx.message.reply_to_message;
 
+  if (!target?.from) {
+    return ctx.reply(
+      "❗ Ответьте на сообщение пользователя и напишите кик."
+    );
+  }
+
+  const userId = Number(target.from.id);
+
+  if (userId === OWNER_ID) {
+    return ctx.reply(
+      "❌ Владелец защищён."
+    );
+  }
+
+  try {
+    const admins =
+      await ctx.telegram.getChatAdministrators(
+        ctx.chat.id
+      );
+
+    const targetIsAdmin = admins.some(
+      admin =>
+        Number(admin.user.id) === userId
+    );
+
+    if (targetIsAdmin) {
+      return ctx.reply(
+        "❌ Нельзя удалить администратора."
+      );
+    }
+
+    // Ban + darhol unban = user guruhdan chiqariladi,
+    // lekin keyin qayta kirishi mumkin.
+    await ctx.telegram.banChatMember(
+      ctx.chat.id,
+      userId
+    );
+
+    await ctx.telegram.unbanChatMember(
+      ctx.chat.id,
+      userId,
+      {
+        only_if_banned: true
+      }
+    );
+
+    await ctx.reply(
+      `👋 ${
+        target.from.first_name || "Пользователь"
+      } удалён из группы.`
+    );
+  } catch (error) {
+    console.error("KICK ERROR:", error);
+
+    await ctx.reply(
+      "❌ Не удалось удалить пользователя."
+    );
+  }
+});
+
+// ============================
+// УДАЛИТЬ
+// Faqat admin
+// ============================
+
+bot.hears(/^!?удалить$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+
+  if (!isGroup(ctx)) {
+    return ctx.reply(
+      "❗ Команда работает только в группе."
+    );
+  }
+
+  const target =
+    ctx.message.reply_to_message;
+
   if (!target) {
     return ctx.reply(
-      "❗ Ответьте на сообщение, которое хотите удалить, и напишите !удалить."
+      "❗ Ответьте на сообщение и напишите удалить."
     );
   }
 
@@ -333,6 +701,13 @@ bot.hears(/^!?удалить$/i, async (ctx) => {
       target.message_id
     );
 
+    // Buyruq xabarini ham o'chirishga harakat
+    try {
+      await ctx.telegram.deleteMessage(
+        ctx.chat.id,
+        ctx.message.message_id
+      );
+    } catch {}
   } catch (error) {
     console.error("DELETE ERROR:", error);
 
@@ -342,439 +717,110 @@ bot.hears(/^!?удалить$/i, async (ctx) => {
   }
 });
 
-
-// ====================
-// МУТ
-// Reply + vaqt: мут 10
-// ====================
-
-bot.hears(/^!?мут(?:\s+(\d+))?$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
-
-  if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
-    return ctx.reply("❗ Эту команду нужно использовать в группе.");
-  }
-
-  const target = ctx.message.reply_to_message;
-
-  if (!target?.from) {
-    return ctx.reply(
-      "❗ Ответьте на сообщение пользователя.\n\n" +
-      "Пример: мут 10"
-    );
-  }
-
-  const userId = Number(target.from.id);
-
-  if (userId === OWNER_ID) {
-    return ctx.reply("❌ Владелец защищён.");
-  }
-
-  const minutes = Number(ctx.match?.[1] || 10);
-
-  if (minutes < 1 || minutes > 10080) {
-    return ctx.reply("❗ Время должно быть от 1 до 10080 минут.");
-  }
-
-  try {
-    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
-
-    const isAdmin = admins.some(
-      admin => Number(admin.user.id) === userId
-    );
-
-    if (isAdmin) {
-      return ctx.reply("❌ Нельзя замутить администратора.");
-    }
-
-    const untilDate = Math.floor(Date.now() / 1000) + minutes * 60;
-
-    await ctx.telegram.restrictChatMember(
-      ctx.chat.id,
-      userId,
-      {
-        until_date: untilDate,
-        permissions: {
-          can_send_messages: false,
-          can_send_audios: false,
-          can_send_documents: false,
-          can_send_photos: false,
-          can_send_videos: false,
-          can_send_video_notes: false,
-          can_send_voice_notes: false,
-          can_send_polls: false,
-          can_send_other_messages: false,
-          can_add_web_page_previews: false,
-          can_change_info: false,
-          can_invite_users: false,
-          can_pin_messages: false
-        }
-      }
-    );
-
-    await ctx.reply(
-      `🔇 ${target.from.first_name || "Пользователь"} получил мут на ${minutes} мин.`
-    );
-
-  } catch (error) {
-    console.error("MUTE ERROR:", error);
-    await ctx.reply(
-      "❌ Не удалось выдать мут.\n\n" +
-      "Проверьте права бота в группе."
-    );
-  }
-});
-
-
-// ====================
-// РАЗМУТ
-// ====================
-
-bot.hears(/^!?размут$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
-
-  if (ctx.chat.type !== "group" && ctx.chat.type !== "supergroup") {
-    return ctx.reply("❗ Эту команду нужно использовать в группе.");
-  }
-
-  const target = ctx.message.reply_to_message;
-
-  if (!target?.from) {
-    return ctx.reply(
-      "❗ Ответьте на сообщение пользователя и напишите размут."
-    );
-  }
-
-  try {
-    await ctx.telegram.restrictChatMember(
-      ctx.chat.id,
-      target.from.id,
-      {
-        permissions: {
-          can_send_messages: true,
-          can_send_audios: true,
-          can_send_documents: true,
-          can_send_photos: true,
-          can_send_videos: true,
-          can_send_video_notes: true,
-          can_send_voice_notes: true,
-          can_send_polls: true,
-          can_send_other_messages: true,
-          can_add_web_page_previews: true
-        }
-      }
-    );
-
-    await ctx.reply(
-      `🔊 ${target.from.first_name || "Пользователь"} размучен.`
-    );
-
-  } catch (error) {
-    console.error("UNMUTE ERROR:", error);
-    await ctx.reply("❌ Не удалось снять мут.");
-  }
-});
-
-
-// ====================
-// ИНФО
-// ====================
-
-bot.hears(/^!?инфо$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
-
-  const target = ctx.message.reply_to_message;
-
-  if (!target?.from) {
-    return ctx.reply(
-      "❗ Ответьте на сообщение пользователя и напишите инфо."
-    );
-  }
-
-  const user = target.from;
-
-  let text =
-    "👤 ИНФОРМАЦИЯ О ПОЛЬЗОВАТЕЛЕ\n\n" +
-    `🆔 ID: ${user.id}\n` +
-    `👤 Имя: ${user.first_name || "Не указано"}\n`;
-
-  if (user.last_name) {
-    text += `📝 Фамилия: ${user.last_name}\n`;
-  }
-
-  if (user.username) {
-    text += `🔗 Username: @${user.username}\n`;
-  } else {
-    text += "🔗 Username: отсутствует\n";
-  }
-
-  text += `🤖 Bot: ${user.is_bot ? "Да" : "Нет"}`;
-
-  await ctx.reply(text);
-});
-
-
-
-// ====================
-// АНТИ-МАТ: UZ + RU
-// ====================
+// ============================
+// MAT FILTRI
+// Hozircha oddiy ro'yxat
+// ============================
 
 const badWords = [
-  // UZ
-  "so'kinish1",
-  "so'kinish2",
-  "so'kinish3",
-
-  // RU
-  "mat1",
-  "mat2",
-  "mat3"
+  "dalbaeb",
+  "долбаеб",
+  "долбоеб",
+  "suka",
+  "сука",
+  "бля",
+  "блять"
 ];
 
-// Matnni tekshirish
-function hasBadWord(text) {
-  if (!text) return false;
-
-  const normalized = text
-    .toLowerCase()
-    .replace(/[.,!?;:()[\]{}"'`~*_+=<>/\\|-]/g, " ");
-
-  const words = normalized.split(/\s+/).filter(Boolean);
-
-  return words.some(word => badWords.includes(word));
-}
-
-// Anti-mat
 bot.on("message", async (ctx, next) => {
   try {
-    // Botlar tekshirilmaydi
-    if (ctx.from?.is_bot) return next();
-
-    // Faqat guruh
-    if (
-      ctx.chat?.type !== "group" &&
-      ctx.chat?.type !== "supergroup"
-    ) {
+    if (!ctx.from || ctx.from.is_bot) {
       return next();
     }
 
-    const text = ctx.message?.text || ctx.message?.caption || "";
-
-    if (!hasBadWord(text)) {
+    if (!isGroup(ctx)) {
       return next();
     }
 
-    const userId = Number(ctx.from.id);
-
-    // Owner himoyalangan
-    if (userId === OWNER_ID) {
+    // Adminlarning xabariga mat filtri ishlamaydi
+    if (await isAdmin(ctx)) {
       return next();
     }
 
-    // Adminlarga tegmaydi
-    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
+    const text = (
+      ctx.message?.text ||
+      ctx.message?.caption ||
+      ""
+    ).toLowerCase();
 
-    const isAdmin = admins.some(
-      admin => Number(admin.user.id) === userId
+    if (!text) {
+      return next();
+    }
+
+    const found = badWords.some(
+      word => text.includes(word)
     );
 
-    if (isAdmin) {
+    if (!found) {
       return next();
     }
 
-    // Xabarni o'chirish
     try {
       await ctx.telegram.deleteMessage(
         ctx.chat.id,
         ctx.message.message_id
       );
     } catch (error) {
-      console.error("BAD WORD DELETE ERROR:", error);
+      console.error("MAT DELETE ERROR:", error);
     }
 
-    // 1 daqiqalik mute
     try {
-      const untilDate = Math.floor(Date.now() / 1000) + 60;
+      const until =
+        Math.floor(Date.now() / 1000) + 60;
 
       await ctx.telegram.restrictChatMember(
         ctx.chat.id,
-        userId,
+        ctx.from.id,
         {
-          until_date: untilDate,
           permissions: {
-            can_send_messages: false,
-            can_send_audios: false,
-            can_send_documents: false,
-            can_send_photos: false,
-            can_send_videos: false,
-            can_send_video_notes: false,
-            can_send_voice_notes: false,
-            can_send_polls: false,
-            can_send_other_messages: false,
-            can_add_web_page_previews: false
-          }
+            can_send_messages: false
+          },
+          until_date: until
         }
       );
 
-      await ctx.reply(
-        `🔇 ${ctx.from.first_name || "Пользователь"} получил мут на 1 минуту за нарушение правил.`
+      await ctx.telegram.sendMessage(
+        ctx.chat.id,
+        `⚠️ ${
+          ctx.from.first_name || "Пользователь"
+        } получил мут на 1 минуту за нарушение правил.`
       );
-
     } catch (error) {
-      console.error("BAD WORD MUTE ERROR:", error);
+      console.error("MAT MUTE ERROR:", error);
     }
-
   } catch (error) {
-    console.error("ANTI-MAT ERROR:", error);
+    console.error("MAT FILTER ERROR:", error);
   }
 
   return next();
 });
 
-// ====================
-// ОШИБКИ
-// ====================
+// ============================
+// XATOLAR
+// ============================
 
-// ====================
 bot.catch((error) => {
   console.error("BOT ERROR:", error);
 });
 
-// ====================
-// ЗАПУСК
-// ====================
-
-
-
-// ===== СТАТИСТИКА ТОП 24 ЧАСА =====
-const messageStats = new Map();
-
-bot.on("message", (ctx, next) => {
-  // Botlarning xabarlari hisoblanmaydi
-  if (ctx.from?.is_bot) return next();
-
-  // Faqat guruhlar
-  if (!ctx.chat || ctx.chat.type === "private") {
-    return next();
-  }
-
-  // Buyruqlar TOP hisobiga kirmaydi
-  const text = ctx.message?.text || "";
-  const command = text.trim().toLowerCase();
-
-  const commands = [
-    "!топ", "топ",
-    "!бан", "бан",
-    "!разбан", "разбан",
-    "!админы", "админы",
-    "!удалить", "удалить",
-    "!панель", "панель",
-    "!старт", "старт",
-    "!start", "start",
-    "!ban", "ban",
-    "!unban", "unban",
-    "!admins", "admins",
-    "!delete", "delete",
-    "!panel", "panel",
-    "!мут", "мут", "размут", "!размут",
-    "!инфо", "инфо"
-  ];
-
-  if (commands.includes(command)) {
-    return next();
-  }
-
-  const now = Date.now();
-  const limit = now - 24 * 60 * 60 * 1000;
-  const chatId = ctx.chat.id;
-  const userId = ctx.from.id;
-
-  if (!messageStats.has(chatId)) {
-    messageStats.set(chatId, new Map());
-  }
-
-  const chatStats = messageStats.get(chatId);
-
-  if (!chatStats.has(userId)) {
-    chatStats.set(userId, {
-      count: 0,
-      username: ctx.from.username || null,
-      name: ctx.from.first_name || "Пользователь",
-      times: []
-    });
-  }
-
-  const user = chatStats.get(userId);
-
-  user.times.push(now);
-  user.times = user.times.filter(t => t >= limit);
-  user.count = user.times.length;
-  user.username = ctx.from.username || user.username;
-  user.name = ctx.from.first_name || user.name;
-
-  return next();
-});
-
-// !топ
-bot.hears(/^!?топ$/i, async (ctx) => {
-  if (!(await isAdmin(ctx))) {
-    return ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-  }
-
-  if (ctx.chat.type === "private") {
-    return ctx.reply("❗ Команда работает только в группе.");
-  }
-
-  const chatStats = messageStats.get(ctx.chat.id);
-
-  if (!chatStats || chatStats.size === 0) {
-    return ctx.reply("📊 За последние 24 часа сообщений пока нет.");
-  }
-
-  const now = Date.now();
-  const limit = now - 24 * 60 * 60 * 1000;
-  const top = [];
-
-  for (const [userId, user] of chatStats) {
-    user.times = user.times.filter(t => t >= limit);
-    user.count = user.times.length;
-
-    if (user.count > 0) {
-      top.push({
-        id: userId,
-        count: user.count,
-        username: user.username,
-        name: user.name
-      });
-    }
-  }
-
-  top.sort((a, b) => b.count - a.count);
-
-  let text = "🏆 ТОП ЗА 24 ЧАСА\n\n";
-
-  top.slice(0, 10).forEach((user, i) => {
-    const name = user.username
-      ? `@${user.username}`
-      : user.name;
-
-    text += `${i + 1}. ${name} — ${user.count} сообщений\n`;
-  });
-
-  await ctx.reply(text);
-});
-
-
-
-// ===== MAT FILTRI =====
+// ============================
+// ISHGA TUSHIRISH
+// ============================
 
 bot.launch();
 
 console.log("🔥 8-A Admin Bot запущен!");
 console.log("👑 OWNER ID:", OWNER_ID);
+
+process.once("SIGINT", () => bot.stop("SIGINT"));
+process.once("SIGTERM", () => bot.stop("SIGTERM"));
