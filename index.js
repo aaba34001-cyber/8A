@@ -6,8 +6,32 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 const OWNER_ID = 8480297110;
 
-function owner(ctx) {
-  return String(ctx.from?.id) === String(OWNER_ID);
+async function owner(ctx) {
+  if (!ctx.from) return false;
+
+  // Bot egasi
+  if (String(ctx.from.id) === String(OWNER_ID)) {
+    return true;
+  }
+
+  // Faqat guruhda adminlarni tekshiramiz
+  if (
+    ctx.chat?.type !== "group" &&
+    ctx.chat?.type !== "supergroup"
+  ) {
+    return false;
+  }
+
+  try {
+    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
+
+    return admins.some(
+      admin => String(admin.user.id) === String(ctx.from.id)
+    );
+  } catch (error) {
+    console.error("ADMIN CHECK ERROR:", error);
+    return false;
+  }
 }
 
 async function isAdmin(ctx) {
@@ -496,6 +520,123 @@ bot.hears(/^!?инфо$/i, async (ctx) => {
 });
 
 
+
+// ====================
+// АНТИ-МАТ: UZ + RU
+// ====================
+
+const badWords = [
+  // UZ
+  "so'kinish1",
+  "so'kinish2",
+  "so'kinish3",
+
+  // RU
+  "mat1",
+  "mat2",
+  "mat3"
+];
+
+// Matnni tekshirish
+function hasBadWord(text) {
+  if (!text) return false;
+
+  const normalized = text
+    .toLowerCase()
+    .replace(/[.,!?;:()[\]{}"'`~*_+=<>/\\|-]/g, " ");
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+
+  return words.some(word => badWords.includes(word));
+}
+
+// Anti-mat
+bot.on("message", async (ctx, next) => {
+  try {
+    // Botlar tekshirilmaydi
+    if (ctx.from?.is_bot) return next();
+
+    // Faqat guruh
+    if (
+      ctx.chat?.type !== "group" &&
+      ctx.chat?.type !== "supergroup"
+    ) {
+      return next();
+    }
+
+    const text = ctx.message?.text || ctx.message?.caption || "";
+
+    if (!hasBadWord(text)) {
+      return next();
+    }
+
+    const userId = Number(ctx.from.id);
+
+    // Owner himoyalangan
+    if (userId === OWNER_ID) {
+      return next();
+    }
+
+    // Adminlarga tegmaydi
+    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
+
+    const isAdmin = admins.some(
+      admin => Number(admin.user.id) === userId
+    );
+
+    if (isAdmin) {
+      return next();
+    }
+
+    // Xabarni o'chirish
+    try {
+      await ctx.telegram.deleteMessage(
+        ctx.chat.id,
+        ctx.message.message_id
+      );
+    } catch (error) {
+      console.error("BAD WORD DELETE ERROR:", error);
+    }
+
+    // 1 daqiqalik mute
+    try {
+      const untilDate = Math.floor(Date.now() / 1000) + 60;
+
+      await ctx.telegram.restrictChatMember(
+        ctx.chat.id,
+        userId,
+        {
+          until_date: untilDate,
+          permissions: {
+            can_send_messages: false,
+            can_send_audios: false,
+            can_send_documents: false,
+            can_send_photos: false,
+            can_send_videos: false,
+            can_send_video_notes: false,
+            can_send_voice_notes: false,
+            can_send_polls: false,
+            can_send_other_messages: false,
+            can_add_web_page_previews: false
+          }
+        }
+      );
+
+      await ctx.reply(
+        `🔇 ${ctx.from.first_name || "Пользователь"} получил мут на 1 минуту за нарушение правил.`
+      );
+
+    } catch (error) {
+      console.error("BAD WORD MUTE ERROR:", error);
+    }
+
+  } catch (error) {
+    console.error("ANTI-MAT ERROR:", error);
+  }
+
+  return next();
+});
+
 // ====================
 // ОШИБКИ
 // ====================
@@ -629,6 +770,9 @@ bot.hears(/^!?топ$/i, async (ctx) => {
   await ctx.reply(text);
 });
 
+
+
+// ===== MAT FILTRI =====
 
 bot.launch();
 
