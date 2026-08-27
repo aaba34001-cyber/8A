@@ -45,7 +45,9 @@ bot.on("message", async (ctx, next) => {
       "кик", "!кик", "удалить", "!удалить", "старт", "!старт",
       "статистика", "!статистика", "магазин", "!магазин", "профиль", "!профиль",
       "правила", "!правила", "кубик", "!кубик", "игры", "!игры", "игра", "!игра",
-      "слот", "!слот", "рулетка", "!рулетка"
+      "слот", "!слот", "рулетка", "!рулетка", "богатые", "!богатые", "богачи", "!богачи",
+      "перевести", "!перевести", "перевод", "!перевод", "казино", "!казино",
+      "баланс", "!баланс", "бонус", "!бонус", "работа", "!работа", "задание", "!задание"
     ];
 
     if (commands.some(cmd => command.startsWith(cmd))) return next();
@@ -114,20 +116,120 @@ function ecoTime(ms) {
   return `${h} ч. ${m} мин.`;
 }
 
+bot.hears(/^!?(богатые|богачи)$/i, async (ctx) => {
+  if (economyUsers.size === 0) {
+    return ctx.reply("💎 Список богатых участников пока пуст.");
+  }
+
+  const sorted = Array.from(economyUsers.values())
+    .map(u => ({ ...u, total: u.balance + u.bank }))
+    .sort((a, b) => b.total - a.total);
+
+  let text = "💎 **ТОП БОГАТЫХ УЧАСТНИКОВ**\n\n";
+  sorted.slice(0, 10).forEach((u, i) => {
+    const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+    text += `${medal} ${ecoName(u)} — 🪙 ${u.total}\n`;
+  });
+
+  await ctx.reply(text, { parse_mode: "Markdown" });
+});
+
+bot.hears(/^!?(перевести|перевод)(?:\s+(\d+))?$/i, async (ctx) => {
+  const sender = ecoUser(ctx);
+  const amount = Number(ctx.match[2]);
+  const replyMsg = ctx.message.reply_to_message;
+
+  if (!replyMsg || !replyMsg.from) {
+    return ctx.reply("💸 Ответьте на сообщение пользователя, которому хотите перевести монеты.\nПример: `Перевести 100` (в ответ на сообщение)", { parse_mode: "Markdown" });
+  }
+
+  if (replyMsg.from.is_bot) {
+    return ctx.reply("❌ Нельзя переводить монеты ботам.");
+  }
+
+  if (replyMsg.from.id === ctx.from.id) {
+    return ctx.reply("❌ Нельзя переводить монеты самому себе.");
+  }
+
+  if (!amount || amount <= 0) {
+    return ctx.reply("💸 Укажите правильную сумму для перевода.\nПример: `Перевести 100`", { parse_mode: "Markdown" });
+  }
+
+  if (sender.balance < amount) {
+    return ctx.reply(`❌ Недостаточно монет.\n💰 Ваш баланс: 🪙 ${sender.balance}`);
+  }
+
+  const receiverId = String(replyMsg.from.id);
+  if (!economyUsers.has(receiverId)) {
+    economyUsers.set(receiverId, {
+      id: replyMsg.from.id,
+      name: replyMsg.from.first_name || "Пользователь",
+      username: replyMsg.from.username || null,
+      balance: ECO_START,
+      bank: 0,
+      lastBonus: 0,
+      lastWork: 0,
+      lastTask: 0,
+      vip: null
+    });
+  }
+  const receiver = economyUsers.get(receiverId);
+
+  sender.balance -= amount;
+  receiver.balance += amount;
+
+  await ctx.reply(
+    `✅ **УСПЕШНЫЙ ПЕРЕВОД**\n\n` +
+      `👤 От: ${ecoName(sender)}\n` +
+      `👤 Кому: ${ecoName(receiver)}\n` +
+      `🪙 Сумма: ${amount} монет\n\n` +
+      `💰 Ваш остаток: 🪙 ${sender.balance}`,
+    { parse_mode: "Markdown" }
+  );
+});
+
+bot.hears(/^!?казино(?:\s+(\d+))?$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[1]);
+
+  if (!bet || bet <= 0) {
+    return ctx.reply("🎰 Использование: Казино 100 (укажите сумму ставки)");
+  }
+
+  if (u.balance < bet) {
+    return ctx.reply(`❌ Недостаточно монет.\n💰 Ваш баланс: 🪙 ${u.balance}`);
+  }
+
+  const win = Math.random() < 0.45;
+
+  if (win) {
+    const reward = bet * 2;
+    u.balance += bet;
+    await ctx.reply(`🎰 **КАЗИНО**\n\n🎉 Вам повезло! Вы удвоили ставку: +🪙 ${bet}\n💰 Ваш баланс: 🪙 ${u.balance}`, { parse_mode: "Markdown" });
+  } else {
+    u.balance -= bet;
+    await ctx.reply(`🎰 **КАЗИНО**\n\n😔 Увы, ставка сгорела: -🪙 ${bet}\n💰 Ваш баланс: 🪙 ${u.balance}`, { parse_mode: "Markdown" });
+  }
+});
+
 bot.hears(/^!?(игры|игра)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   await ctx.reply(
     "🎮 **ИГРОВОЙ ЦЕНТР / OʻYINLAR BOʻLIMI**\n\n" +
       "🎲 **1. Кубик** — Игра в кости с ботом.\n" +
-      "👉 Использование: `Кубик [ставка]` (Пример: `Кубик 100`)\n\n" +
-      "🎰 **2. Слот** — Игровой автомат (Казино).\n" +
-      "👉 Использование: `Слот [ставка]` (Пример: `Слот 200`)\n\n" +
+      "👉 Использование: `Кубик [ставка]`\n\n" +
+      "🎰 **2. Слот** — Игровой автомат.\n" +
+      "👉 Использование: `Слот [ставка]`\n\n" +
       "🎯 **3. Рулетка** — Угадай число от 1 до 5.\n" +
-      "👉 Использование: `Рулетка [число] [ставка]` (Пример: `Рулетка 3 100`)\n\n" +
-      "💼 **Как заработать монеты для игр:**\n" +
-      "• `Бонус` — бесплатные монеты раз в 24 часа\n" +
-      "• `Работа` — заработок каждый час\n" +
-      "• `Задание` — выполнение заданий каждые 30 мин\n\n" +
+      "👉 Использование: `Рулетка [число] [ставка]`\n\n" +
+      "💎 **4. Казино** — Игра на риск (x2).\n" +
+      "👉 Использование: `Казино [ставка]`\n\n" +
+      "💼 **Заработок монет:**\n" +
+      "• `Бонус` — раз в 24 часа\n" +
+      "• `Работа` — каждый час\n" +
+      "• `Задание` — каждые 30 минут\n" +
+      "• `Перевести` — перевод другу\n" +
+      "• `Богатые` — топ богачей\n\n" +
       `💰 Ваш баланс: 🪙 ${u.balance}`,
     { parse_mode: "Markdown" }
   );
@@ -224,7 +326,7 @@ bot.hears(/^!?рулетка(?:\s+(\d+))?(?:\s+(\d+))?$/i, async (ctx) => {
 bot.hears(/^!?старт$/i, async (ctx) => {
   await ctx.reply(
     "🔥 8-A ADMIN BOT 🔥\n\n" +
-      "👤 Информационные команды:\n" +
+      "👤 Информационные и игровые команды:\n" +
       "топ — ТОП за 24 часа\n" +
       "инфо — информация о пользователе\n" +
       "мойид — ваш ID\n" +
@@ -233,6 +335,8 @@ bot.hears(/^!?старт$/i, async (ctx) => {
       "магазин — VIP statuslar do'koni\n" +
       "профиль — ваш профиль\n" +
       "игры — список всех игр\n" +
+      "богатые — топ богатых участников\n" +
+      "перевести — перевести монеты другому\n" +
       "правила — правила группы\n\n" +
       "👑 Команды администраторов:\n" +
       "бан, мут, разбан, кик, удалить, админы"
@@ -243,7 +347,7 @@ bot.hears(/^!?помощь$/i, async (ctx) => {
   await ctx.reply(
     "📚 ДОСТУПНЫЕ КОМАНДЫ\n\n" +
       "👤 Для всех:\n" +
-      "топ, инфо, мойид, статистика, помощь, баланс, бонус, работа, магазин, профиль, игры, правила, кубик, слот, рулетка\n\n" +
+      "топ, инфо, мойид, статистика, помощь, баланс, бонус, работа, магазин, профиль, игры, богатые, перевести, правила, кубик, слот, рулетка, казино\n\n" +
       "👑 Для администраторов:\n" +
       "бан, мут, разбан, кик, удалить, админы, панель"
   );
