@@ -1433,12 +1433,17 @@ bot.action("game_transfer_help", async (ctx) => {
 });
 
 // Передать 100
-bot.hears(/^!?передать\s+100$/i, async (ctx) => {
+bot.hears(/^!?передать\s+(\d+)$/i, async (ctx) => {
+  const amount = parseInt(ctx.match[1], 10);
   const target = ctx.message.reply_to_message?.from;
+
+  if (!amount || amount <= 0) {
+    return ctx.reply("❗ Укажите правильную сумму. Пример: Передать 100");
+  }
 
   if (!target) {
     return ctx.reply(
-      "❗ Ответьте на сообщение пользователя и напишите «Передать 100»."
+      "❗ Ответьте на сообщение пользователя и напишите «Передать <сумма>»."
     );
   }
 
@@ -1451,30 +1456,34 @@ bot.hears(/^!?передать\s+100$/i, async (ctx) => {
   }
 
   const sender = getGameUser(ctx);
-  const receiver = getGameUser({
-    from: target
-  });
+  const receiver = getGameUser({ from: target });
 
-  if (sender.balance < 100) {
+  const isOwnerSender = String(ctx.from.id) === String(OWNER_ID);
+
+  if (!isOwnerSender && sender.balance < amount) {
     return ctx.reply(
-      "❌ Недостаточно монет.\n\n" +
-      "💰 Ваш баланс: 🪙 " + sender.balance
+      "❌ Недостаточно монет.\n\n💰 Ваш баланс: 🪙 " + sender.balance
     );
   }
 
-  sender.balance -= 100;
-  receiver.balance += 100;
+  if (!isOwnerSender) {
+    sender.balance -= amount;
+  }
+  receiver.balance += amount;
+
+  const targetName = target.username
+    ? "@" + target.username
+    : target.first_name || "Пользователь";
 
   await ctx.reply(
     "💸 ПЕРЕДАЧА ВЫПОЛНЕНА\n\n" +
-    "👤 Получатель: " +
-    (target.username ? "@" + target.username : target.first_name || "Пользователь") +
-    "\n" +
-    "🪙 Передано: 100\n\n" +
+    "👤 Получатель: " + targetName + "\n" +
+    "🪙 Передано: " + amount + "\n\n" +
     "💰 Ваш баланс: " + sender.balance + "\n" +
     "💰 Баланс получателя: " + receiver.balance
   );
 });
+
 
 // Inline callbacklarda xatoni ushlash
 bot.action(/^game_/, async (ctx) => {
