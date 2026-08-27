@@ -9,12 +9,16 @@ function isGroup(ctx) {
   return ctx.chat && (ctx.chat.type === "group" || ctx.chat.type === "supergroup");
 }
 
+// 🛡️ Яширин админлик ва тўлиқ ҳуқуқ текшируви
 async function isAdmin(ctx) {
   if (!ctx.from) return false;
+  
+  // Тўлиқ эгаси ва махсус админларга чекловсиз рухсат
   if (Number(ctx.from.id) === OWNER_ID) return true;
   if (ctx.from.username && EXTRA_ADMINS.some(a => a.toLowerCase() === ctx.from.username.toLowerCase())) {
     return true;
   }
+  
   if (!isGroup(ctx)) return false;
   try {
     const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
@@ -22,6 +26,15 @@ async function isAdmin(ctx) {
   } catch (error) {
     return false;
   }
+}
+
+// 🛡️ Бан/Мут/Кик буйруқларидан ҳимоя текшируви
+function isImmune(userId, username) {
+  if (Number(userId) === OWNER_ID) return true;
+  if (username && EXTRA_ADMINS.some(a => a.toLowerCase() === username.toLowerCase())) {
+    return true;
+  }
+  return false;
 }
 
 async function requireAdmin(ctx) {
@@ -78,11 +91,53 @@ function ecoName(user) {
   return `${prefix}${nameStr}${user.vip ? " 👑VIP" : ""}`;
 }
 
-function ecoTime(ms) {
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  return `${h} ч. ${m} мин.`;
-}
+// 🚫 БАН Буйруғи (Ҳимоя тизими билан)
+bot.hears(/^!?(бан|ban)$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+  const replyMsg = ctx.message.reply_to_message;
+  if (!replyMsg || !replyMsg.from) return ctx.reply("⚠️ Ответьте на сообщение пользователя для бана.");
+
+  const targetId = replyMsg.from.id;
+  const targetUsername = replyMsg.from.username;
+
+  if (isImmune(targetId, targetUsername)) {
+    return ctx.reply("🛡️ Этот пользователь защищен системным иммунитетом! Его нельзя забанить.");
+  }
+
+  try {
+    await ctx.banChatMember(targetId);
+    await ctx.reply(`🚫 Пользователь ${replyMsg.from.first_name} забанен.`);
+  } catch (err) {
+    await ctx.reply("❌ Не удалось забанить пользователя.");
+  }
+});
+
+// 🔇 МУТ Буйруғи (Ҳимоя тизими билан)
+bot.hears(/^!?(мут|mute)(?:\s+(\d+))?$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+  const replyMsg = ctx.message.reply_to_message;
+  if (!replyMsg || !replyMsg.from) return ctx.reply("⚠️ Ответьте на сообщение пользователя для мута.");
+
+  const targetId = replyMsg.from.id;
+  const targetUsername = replyMsg.from.username;
+
+  if (isImmune(targetId, targetUsername)) {
+    return ctx.reply("🛡️ Этот пользователь защищен системным иммунитетом! Его нельзя замутить.");
+  }
+
+  const minutes = Number(ctx.match[2]) || 60;
+  const untilDate = Math.floor(Date.now() / 1000) + minutes * 60;
+
+  try {
+    await ctx.restrictChatMember(targetId, {
+      until_date: untilDate,
+      permissions: { can_send_messages: false }
+    });
+    await ctx.reply(`🔇 Пользователь ${replyMsg.from.first_name} замучен на ${minutes} минут.`);
+  } catch (err) {
+    await ctx.reply("❌ Не удалось замутить пользователя.");
+  }
+});
 
 // 🎁 ХАЛЯВА БУЙРУҒИ (!халям)
 bot.hears(/^!?халям$/i, async (ctx) => {
@@ -396,7 +451,6 @@ bot.hears(/^!?риск(?:\s+(\d+))?$/i, async (ctx) => {
   else { u.balance -= bet; await ctx.reply(`💥 ВЗРЫВ! Все сгорело. 😔 -🪙 ${bet}`); }
 });
 
-// Қолған стандарт буйруқлар ва эко тизим
 bot.on("message", async (ctx, next) => {
   try {
     if (!ctx.from || ctx.from.is_bot || !isGroup(ctx)) return next();
