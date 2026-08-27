@@ -68,7 +68,7 @@ function ecoTime(ms) {
   return `${h} ч. ${m} мин.`;
 }
 
-// Middelware - faqat statistika uchun
+// Middelware
 bot.on("message", async (ctx, next) => {
   try {
     if (!ctx.from || ctx.from.is_bot || !isGroup(ctx)) return next();
@@ -99,7 +99,7 @@ bot.on("message", async (ctx, next) => {
   return next();
 });
 
-// "Богатые", "богатые." va нуқта билан ёзилган барча вариантларни тутади
+// Богатые ва Богатые. буйруқлари учун
 bot.hears(/^!?(богатые|богачи)[\.\s]*$/i, async (ctx) => {
   ecoUser(ctx);
 
@@ -111,13 +111,13 @@ bot.hears(/^!?(богатые|богачи)[\.\s]*$/i, async (ctx) => {
     return ctx.reply("💎 Список богатых участников пока пуст.");
   }
 
-  let text = "💎 **ТОП БОГАТЫХ УЧАСТНИКОВ**\n\n";
+  let text = "💎 ТОП БОГАТЫХ УЧАСТНИКОВ\n\n";
   sorted.slice(0, 10).forEach((u, i) => {
     const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
     text += `${medal} ${ecoName(u)} — 🪙 ${u.total}\n`;
   });
 
-  await ctx.reply(text, { parse_mode: "Markdown" });
+  await ctx.reply(text);
 });
 
 bot.hears(/^!?(перевести|перевод)(?:\s+(\d+))?$/i, async (ctx) => {
@@ -126,7 +126,7 @@ bot.hears(/^!?(перевести|перевод)(?:\s+(\d+))?$/i, async (ctx) =
   const replyMsg = ctx.message.reply_to_message;
 
   if (!replyMsg || !replyMsg.from) {
-    return ctx.reply("💸 Ответьте на сообщение пользователя, которому хотите перевести монеты.\nПример: `Перевести 100`", { parse_mode: "Markdown" });
+    return ctx.reply("💸 Ответьте на сообщение пользователя, которому хотите перевести монеты.");
   }
 
   if (replyMsg.from.is_bot || replyMsg.from.id === ctx.from.id) {
@@ -146,8 +146,7 @@ bot.hears(/^!?(перевести|перевод)(?:\s+(\d+))?$/i, async (ctx) =
   receiver.balance += amount;
 
   await ctx.reply(
-    `✅ **УСПЕШНЫЙ ПЕРЕВОД**\n\n👤 От: ${ecoName(sender)}\n👤 Кому: ${ecoName(receiver)}\n🪙 Сумма: ${amount} монет`,
-    { parse_mode: "Markdown" }
+    `✅ УСПЕШНЫЙ ПЕРЕВОД\n\n👤 От: ${ecoName(sender)}\n👤 Кому: ${ecoName(receiver)}\n🪙 Сумма: ${amount} монет`
   );
 });
 
@@ -167,18 +166,17 @@ bot.hears(/^!?казино(?:\s+(\d+))?$/i, async (ctx) => {
 
   if (win) {
     u.balance += bet;
-    await ctx.reply(`🎰 **КАЗИНО**\n\n🎉 Вы выиграли! +🪙 ${bet}\n💰 Ваш баланс: 🪙 ${u.balance}`, { parse_mode: "Markdown" });
+    await ctx.reply(`🎰 КАЗИНО\n\n🎉 Вы выиграли! +🪙 ${bet}\n💰 Ваш баланс: 🪙 ${u.balance}`);
   } else {
     u.balance -= bet;
-    await ctx.reply(`🎰 **КАЗИНО**\n\n😔 Увы, ставка сгорела: -🪙 ${bet}\n💰 Ваш баланс: 🪙 ${u.balance}`, { parse_mode: "Markdown" });
+    await ctx.reply(`🎰 КАЗИНО\n\n😔 Увы, ставка сгорела: -🪙 ${bet}\n💰 Ваш баланс: 🪙 ${u.balance}`);
   }
 });
 
 bot.hears(/^!?(игры|игра)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   await ctx.reply(
-    "🎮 **ИГРОВОЙ ЦЕНТР**\n\n🎲 `Кубик [ставка]`\n🎰 `Слот [ставка]`\n🎯 `Рулетка [число] [ставка]`\n💎 `Казино [ставка]`\n\n💼 **Заработок:** `Бонус`, `Работа`, `Задание`, `Богатые`\n💰 Ваш баланс: 🪙 ${u.balance}`,
-    { parse_mode: "Markdown" }
+    `🎮 ИГРОВОЙ ЦЕНТР\n\n🎲 Кубик [ставка]\n🎰 Слот [ставка]\n🎯 Рулетка [число] [ставка]\n💎 Казино [ставка]\n\n💼 Заработок: Бонус, Работа, Задание, Богатые\n💰 Ваш баланс: 🪙 ${u.balance}`
   );
 });
 
@@ -235,7 +233,7 @@ bot.hears(/^!?рулетка(?:\s+(\d+))?(?:\s+(\d+))?$/i, async (ctx) => {
   const bet = Number(ctx.match[2]);
 
   if (!num || num < 1 || num > 5 || !bet || bet <= 0) {
-    return ctx.reply("🎯 Использование: Рулетка [1-5] [ставка]", { parse_mode: "Markdown" });
+    return ctx.reply("🎯 Использование: Рулетка [1-5] [ставка]");
   }
 
   if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.\n💰 Ваш баланс: 🪙 ${u.balance}`);
@@ -261,7 +259,7 @@ bot.hears(/^!?помощь$/i, async (ctx) => {
 });
 
 bot.hears(/^!?правила$/i, async (ctx) => {
-  await ctx.reply("📜 ПРАВИЛА ГРУППЫ\n\n1. Без оскорблений.\n2. Без спама.\n3. Уважайте участников.");
+  await ctx.reply("📜 ПРАВИЛА ГРУППЫ\n\n1. Без оскорбей.\n2. Без спама.\n3. Уважайте участников.");
 });
 
 bot.hears(/^!?мойид$/i, async (ctx) => {
