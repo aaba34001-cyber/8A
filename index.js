@@ -49,7 +49,9 @@ function ecoUser(ctx) {
       lastBonus: 0,
       lastWork: 0,
       lastTask: 0,
-      vip: null
+      vip: false,
+      bankLimitUnlocked: false,
+      title: null
     });
   }
   const user = economyUsers.get(id);
@@ -59,7 +61,9 @@ function ecoUser(ctx) {
 }
 
 function ecoName(user) {
-  return user.username ? `@${user.username}` : user.name;
+  const prefix = user.title ? `[${user.title}] ` : "";
+  const nameStr = user.username ? `@${user.username}` : user.name;
+  return `${prefix}${nameStr}${user.vip ? " 👑VIP" : ""}`;
 }
 
 function ecoTime(ms) {
@@ -99,20 +103,80 @@ bot.on("message", async (ctx, next) => {
   return next();
 });
 
-// Магазин буйруғи
+// Магазин
 bot.hears(/^!?(магазин|дўкон)[\.\s]*$/i, async (ctx) => {
   const u = ecoUser(ctx);
   await ctx.reply(
     `🛒 **МАГАЗИН ТОВАРОВ И УСЛУГ**\n\n` +
-    `1. 👑 **VIP Статус** — 🪙 5000 монет\n` +
+    `1. 👑 **VIP Статус** — 🪙 5000 монет (Даёт 2x бонус)\n` +
     `2. 🏦 **Снять ограничения банка** — 🪙 3000 монет\n` +
-    `3. 🎨 **Кастомный титул** — 🪙 2000 монет\n\n` +
+    `3. 🎨 **Кастомный титул** — 🪙 2000 монет (Команда: Титул [текст])\n\n` +
     `💡 *Чтобы купить, используйте команду: Купить [номер]*\n` +
     `💰 Ваш баланс: 🪙 ${u.balance}`
   );
 });
 
-// Игры менюси (магазин ҳақида маълумот билан)
+// Купить буйруғи
+bot.hears(/^!?купить(?:\s+(\d+))?$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const itemNum = Number(ctx.match[1]);
+
+  if (!itemNum) {
+    return ctx.reply("🛒 Укажите номер товара: Купить 1, Купить 2 или Купить 3");
+  }
+
+  if (itemNum === 1) {
+    if (u.vip) return ctx.reply("👑 У вас уже есть VIP Статус!");
+    if (u.balance < 5000) return ctx.reply(`❌ Недостаточно монет (Нужно: 🪙 5000). Ваш баланс: 🪙 ${u.balance}`);
+    
+    u.balance -= 5000;
+    u.vip = true;
+    return ctx.reply(`🎉 Поздравляем! Вы успешно приобрели 👑 VIP Статус!`);
+  } 
+  
+  else if (itemNum === 2) {
+    if (u.bankLimitUnlocked) return ctx.reply("🏦 У вас уже сняты ограничения банка!");
+    if (u.balance < 3000) return ctx.reply(`❌ Недостаточно монет (Нужно: 🪙 3000). Ваш баланс: 🪙 ${u.balance}`);
+    
+    u.balance -= 3000;
+    u.bankLimitUnlocked = true;
+    return ctx.reply(`🎉 Вы успешно сняли все ограничения банка!`);
+  } 
+  
+  else if (itemNum === 3) {
+    if (u.balance < 2000) return ctx.reply(`❌ Недостаточно монет (Нужно: 🪙 2000). Ваш баланс: 🪙 ${u.balance}`);
+    
+    u.balance -= 2000;
+    u.title = u.title || "Игрок";
+    return ctx.reply(`🎉 Вы купили право на Кастомный титул!\n\n✍️ Теперь напишите: **Титул [ваше слово]** (например: Титул Король)`);
+  } 
+  
+  else {
+    return ctx.reply("❌ Товар с таким номером не найден. Посмотрите меню: Магазин");
+  }
+});
+
+// Титул ўрнатиш
+bot.hears(/^!?титул(?:\s+(.+))?$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const newTitle = ctx.match[1];
+
+  if (!u.title) {
+    return ctx.reply("❌ Сначала купите возможность установки титула в магазине (Купить 3).");
+  }
+
+  if (!newTitle) {
+    return ctx.reply("✍️ Использование: Титул [ваш текст] (например: Титул Король)");
+  }
+
+  if (newTitle.length > 15) {
+    return ctx.reply("❌ Титул должен быть не длиннее 15 символов.");
+  }
+
+  u.title = newTitle.trim();
+  await ctx.reply(`✅ Ваш новый титул установлен: **[${u.title}]**`);
+});
+
 bot.hears(/^!?(игры|игра)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   await ctx.reply(
@@ -122,7 +186,7 @@ bot.hears(/^!?(игры|игра)$/i, async (ctx) => {
     `🎯 Рулетка [число] [ставка]\n` +
     `💎 Казино [ставка]\n\n` +
     `💼 **Заработок:** Бонус, Работа, Задание, Богатые\n` +
-    `🛒 **Покупки:** Магазин (команда: Магазин)\n` +
+    `🛒 **Покупки:** Магазин (команда: Магазин / Купить [номер])\n` +
     `💰 Ваш баланс: 🪙 ${u.balance}`
   );
 });
@@ -271,11 +335,11 @@ bot.hears(/^!?рулетка(?:\s+(\d+))?(?:\s+(\d+))?$/i, async (ctx) => {
 });
 
 bot.hears(/^!?старт$/i, async (ctx) => {
-  await ctx.reply("🔥 8-A ADMIN BOT 🔥\n\nКоманды: топ, инфо, мойид, статистика, помощь, магазин, профиль, игры, богатые, перевести, правила");
+  await ctx.reply("🔥 8-A ADMIN BOT 🔥\n\nКоманды: топ, инфо, мойид, статистика, помощь, магазин, купить, титул, профиль, игры, богатые, перевести, правила");
 });
 
 bot.hears(/^!?помощь$/i, async (ctx) => {
-  await ctx.reply("📚 Команды: топ, инфо, мойид, статистика, помощь, баланс, бонус, работа, магазин, профиль, игры, богатые, перевести, правила, кубик, слот, рулетка, казино");
+  await ctx.reply("📚 Команды: топ, инфо, мойид, статистика, помощь, баланс, бонус, работа, магазин, купить, титул, профиль, игры, богатые, перевести, правила, кубик, слот, рулетка, казино");
 });
 
 bot.hears(/^!?правила$/i, async (ctx) => {
@@ -450,9 +514,10 @@ bot.hears(/^!?бонус$/iu, async (ctx) => {
     return ctx.reply(`⏳ Бонус уже получен.\nСледующий через: ${ecoTime(left)}`);
   }
 
-  u.balance += ECO_BONUS;
+  const bonusAmount = u.vip ? ECO_BONUS * 2 : ECO_BONUS;
+  u.balance += bonusAmount;
   u.lastBonus = now;
-  await ctx.reply(`🎁 БОНУС ПОЛУЧЕН!\n\n🪙 +${ECO_BONUS} монет\n💰 Баланс: ${u.balance}`);
+  await ctx.reply(`🎁 БОНУС ПОЛУЧЕН!${u.vip ? " (2x VIP)" : ""}\n\n🪙 +${bonusAmount} монет\n💰 Баланс: ${u.balance}`);
 });
 
 bot.hears(/^!?работа$/iu, async (ctx) => {
@@ -487,7 +552,7 @@ bot.hears(/^!?задание$/iu, async (ctx) => {
 
 bot.hears(/^!?профиль$/iu, async (ctx) => {
   const u = ecoUser(ctx);
-  await ctx.reply(`👤 ПРОФИЛЬ\n\n🆔 ID: ${u.id}\n👤 Имя: ${u.name}\n🪙 Кошелёк: ${u.balance}\n🏦 Банк: ${u.bank}`);
+  await ctx.reply(`👤 ПРОФИЛЬ\n\n🆔 ID: ${u.id}\n👤 Имя: ${ecoName(u)}\n🪙 Кошелёк: ${u.balance}\n🏦 Банк: ${u.bank}`);
 });
 
 bot.catch((error) => console.error("BOT ERROR:", error));
