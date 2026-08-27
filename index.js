@@ -68,15 +68,48 @@ function ecoTime(ms) {
   return `${h} ч. ${m} мин.`;
 }
 
-bot.hears(/^!?(богатые|богачи)$/i, async (ctx) => {
-  const currentUser = ecoUser(ctx);
-  if (currentUser.balance === ECO_START && currentUser.bank === 0) {
-    currentUser.balance += 500; // Автоматический бонус для теста
-  }
+// Middelware - faqat statistika uchun
+bot.on("message", async (ctx, next) => {
+  try {
+    if (!ctx.from || ctx.from.is_bot || !isGroup(ctx)) return next();
+
+    const now = Date.now();
+    const limit = now - 24 * 60 * 60 * 1000;
+    const chatId = ctx.chat.id;
+    const userId = ctx.from.id;
+
+    if (!messageStats.has(chatId)) messageStats.set(chatId, new Map());
+    const chatStats = messageStats.get(chatId);
+
+    if (!chatStats.has(userId)) {
+      chatStats.set(userId, {
+        times: [],
+        username: ctx.from.username || null,
+        name: ctx.from.first_name || "Пользователь",
+      });
+    }
+
+    const user = chatStats.get(userId);
+    user.times.push(now);
+    user.times = user.times.filter((time) => time >= limit);
+    user.username = ctx.from.username || user.username;
+    user.name = ctx.from.first_name || user.name;
+  } catch (error) {}
+
+  return next();
+});
+
+// "Богатые", "богатые." va нуқта билан ёзилган барча вариантларни тутади
+bot.hears(/^!?(богатые|богачи)[\.\s]*$/i, async (ctx) => {
+  ecoUser(ctx);
 
   const sorted = Array.from(economyUsers.values())
     .map(u => ({ ...u, total: u.balance + u.bank }))
     .sort((a, b) => b.total - a.total);
+
+  if (sorted.length === 0) {
+    return ctx.reply("💎 Список богатых участников пока пуст.");
+  }
 
   let text = "💎 **ТОП БОГАТЫХ УЧАСТНИКОВ**\n\n";
   sorted.slice(0, 10).forEach((u, i) => {
@@ -87,11 +120,307 @@ bot.hears(/^!?(богатые|богачи)$/i, async (ctx) => {
   await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
-bot.hears(/^!?баланс$/iu, async (ctx) => {
+bot.hears(/^!?(перевести|перевод)(?:\s+(\d+))?$/i, async (ctx) => {
+  const sender = ecoUser(ctx);
+  const amount = Number(ctx.match[2]);
+  const replyMsg = ctx.message.reply_to_message;
+
+  if (!replyMsg || !replyMsg.from) {
+    return ctx.reply("💸 Ответьте на сообщение пользователя, которому хотите перевести монеты.\nПример: `Перевести 100`", { parse_mode: "Markdown" });
+  }
+
+  if (replyMsg.from.is_bot || replyMsg.from.id === ctx.from.id) {
+    return ctx.reply("❌ Нельзя переводить монеты ботам или самому себе.");
+  }
+
+  if (!amount || amount <= 0) {
+    return ctx.reply("💸 Укажите правильную сумму для перевода.");
+  }
+
+  if (sender.balance < amount) {
+    return ctx.reply(`❌ Недостаточно монет.\n💰 Ваш баланс: 🪙 ${sender.balance}`);
+  }
+
+  const receiver = ecoUser({ from: replyMsg.from });
+  sender.balance -= amount;
+  receiver.balance += amount;
+
+  await ctx.reply(
+    `✅ **УСПЕШНЫЙ ПЕРЕВОД**\n\n👤 От: ${ecoName(sender)}\n👤 Кому: ${ecoName(receiver)}\n🪙 Сумма: ${amount} монет`,
+    { parse_mode: "Markdown" }
+  );
+});
+
+bot.hears(/^!?казино(?:\s+(\d+))?$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[1]);
+
+  if (!bet || bet <= 0) {
+    return ctx.reply("🎰 Использование: Казино 100");
+  }
+
+  if (u.balance < bet) {
+    return ctx.reply(`❌ Недостаточно монет.\n💰 Ваш баланс: 🪙 ${u.balance}`);
+  }
+
+  const win = Math.random() < 0.45;
+
+  if (win) {
+    u.balance += bet;
+    await ctx.reply(`🎰 **КАЗИНО**\n\n🎉 Вы выиграли! +🪙 ${bet}\n💰 Ваш баланс: 🪙 ${u.balance}`, { parse_mode: "Markdown" });
+  } else {
+    u.balance -= bet;
+    await ctx.reply(`🎰 **КАЗИНО**\n\n😔 Увы, ставка сгорела: -🪙 ${bet}\n💰 Ваш баланс: 🪙 ${u.balance}`, { parse_mode: "Markdown" });
+  }
+});
+
+bot.hears(/^!?(игры|игра)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   await ctx.reply(
-    `💰 ВАШ БАЛАНС\n\n👤 ${ecoName(u)}\n🪙 Кошелёк: ${u.balance}\n🏦 Банк: ${u.bank}\n💎 Всего: ${u.balance + u.bank}`
+    "🎮 **ИГРОВОЙ ЦЕНТР**\n\n🎲 `Кубик [ставка]`\n🎰 `Слот [ставка]`\n🎯 `Рулетка [число] [ставка]`\n💎 `Казино [ставка]`\n\n💼 **Заработок:** `Бонус`, `Работа`, `Задание`, `Богатые`\n💰 Ваш баланс: 🪙 ${u.balance}`,
+    { parse_mode: "Markdown" }
   );
+});
+
+bot.hears(/^!?кубик(?:\s+(\d+))?$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[1]);
+
+  if (!bet || bet <= 0) return ctx.reply("🎲 Использование: Кубик 100");
+  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.\n💰 Ваш баланс: 🪙 ${u.balance}`);
+
+  const userDice = Math.floor(Math.random() * 6) + 1;
+  const botDice = Math.floor(Math.random() * 6) + 1;
+
+  if (userDice > botDice) {
+    u.balance += bet;
+    await ctx.reply(`🎲 Вы выиграли! +🪙 ${bet}\n💰 Баланс: 🪙 ${u.balance}`);
+  } else if (userDice < botDice) {
+    u.balance -= bet;
+    await ctx.reply(`🎲 Вы проиграли! -🪙 ${bet}\n💰 Баланс: 🪙 ${u.balance}`);
+  } else {
+    await ctx.reply(`🎲 Ничья! Ставка возвращена.\n💰 Баланс: 🪙 ${u.balance}`);
+  }
+});
+
+bot.hears(/^!?слот(?:\s+(\d+))?$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[1]);
+
+  if (!bet || bet <= 0) return ctx.reply("🎰 Использование: Слот 100");
+  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.\n💰 Ваш баланс: 🪙 ${u.balance}`);
+
+  const items = ["🍋", "🍒", "7️⃣", "💎"];
+  const r1 = items[Math.floor(Math.random() * items.length)];
+  const r2 = items[Math.floor(Math.random() * items.length)];
+  const r3 = items[Math.floor(Math.random() * items.length)];
+
+  if (r1 === r2 && r2 === r3) {
+    const win = bet * 3;
+    u.balance += win;
+    await ctx.reply(`🎰 [ ${r1} | ${r2} | ${r3} ]\n\n🔥 ДЖЕКПОТ! +🪙 ${win}\n💰 Баланс: 🪙 ${u.balance}`);
+  } else if (r1 === r2 || r2 === r3 || r1 === r3) {
+    const win = Math.floor(bet * 1.5);
+    u.balance += win;
+    await ctx.reply(`🎰 [ ${r1} | ${r2} | ${r3} ]\n\n🎉 Выиграли +🪙 ${win}\n💰 Баланс: 🪙 ${u.balance}`);
+  } else {
+    u.balance -= bet;
+    await ctx.reply(`🎰 [ ${r1} | ${r2} | ${r3} ]\n\n😔 Проиграли -🪙 ${bet}\n💰 Баланс: 🪙 ${u.balance}`);
+  }
+});
+
+bot.hears(/^!?рулетка(?:\s+(\d+))?(?:\s+(\d+))?$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const num = Number(ctx.match[1]);
+  const bet = Number(ctx.match[2]);
+
+  if (!num || num < 1 || num > 5 || !bet || bet <= 0) {
+    return ctx.reply("🎯 Использование: Рулетка [1-5] [ставка]", { parse_mode: "Markdown" });
+  }
+
+  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.\n💰 Ваш баланс: 🪙 ${u.balance}`);
+
+  const winNum = Math.floor(Math.random() * 5) + 1;
+
+  if (num === winNum) {
+    const win = bet * 4;
+    u.balance += win;
+    await ctx.reply(`🎯 Выпало: ${winNum}\n🎉 Вы выиграли +🪙 ${win}!\n💰 Баланс: 🪙 ${u.balance}`);
+  } else {
+    u.balance -= bet;
+    await ctx.reply(`🎯 Выпало: ${winNum}\n😔 Потеряно: 🪙 ${bet}\n💰 Баланс: 🪙 ${u.balance}`);
+  }
+});
+
+bot.hears(/^!?старт$/i, async (ctx) => {
+  await ctx.reply("🔥 8-A ADMIN BOT 🔥\n\nКоманды: топ, инфо, мойид, статистика, помощь, магазин, профиль, игры, богатые, перевести, правила");
+});
+
+bot.hears(/^!?помощь$/i, async (ctx) => {
+  await ctx.reply("📚 Команды: топ, инфо, мойид, статистика, помощь, баланс, бонус, работа, магазин, профиль, игры, богатые, перевести, правила, кубик, слот, рулетка, казино");
+});
+
+bot.hears(/^!?правила$/i, async (ctx) => {
+  await ctx.reply("📜 ПРАВИЛА ГРУППЫ\n\n1. Без оскорблений.\n2. Без спама.\n3. Уважайте участников.");
+});
+
+bot.hears(/^!?мойид$/i, async (ctx) => {
+  await ctx.reply(`🆔 Ваш ID: ${ctx.from.id}`);
+});
+
+bot.hears(/^!?топ$/i, async (ctx) => {
+  if (!isGroup(ctx)) return ctx.reply("❗ Только для групп.");
+  const chatStats = messageStats.get(ctx.chat.id);
+  if (!chatStats || chatStats.size === 0) return ctx.reply("📊 За 24 часа сообщений нет.");
+
+  const limit = Date.now() - 24 * 60 * 60 * 1000;
+  const top = [];
+
+  for (const [userId, user] of chatStats) {
+    user.times = user.times.filter((t) => t >= limit);
+    if (user.times.length > 0) {
+      top.push({ id: userId, count: user.times.length, username: user.username, name: user.name });
+    }
+  }
+
+  top.sort((a, b) => b.count - a.count);
+  if (top.length === 0) return ctx.reply("📊 За 24 часа сообщений нет.");
+
+  let text = "🏆 ТОП ЗА 24 ЧАСА\n\n";
+  top.slice(0, 10).forEach((u, i) => {
+    text += `${i + 1}. ${u.username ? "@" + u.username : u.name} — ${u.count} сообщ.\n`;
+  });
+
+  await ctx.reply(text);
+});
+
+bot.hears(/^!?статистика$/i, async (ctx) => {
+  if (!isGroup(ctx)) return ctx.reply("❗ Только для групп.");
+  const chatStats = messageStats.get(ctx.chat.id);
+  if (!chatStats) return ctx.reply("📊 Нет статистики.");
+
+  let total = 0;
+  const limit = Date.now() - 24 * 60 * 60 * 1000;
+  for (const user of chatStats.values()) {
+    user.times = user.times.filter((t) => t >= limit);
+    total += user.times.length;
+  }
+
+  await ctx.reply(`📊 СТАТИСТИКА ЗА 24 ЧАСА\n\n💬 Сообщений: ${total}\n👥 Активных: ${chatStats.size}`);
+});
+
+bot.hears(/^!?инфо$/i, async (ctx) => {
+  const target = ctx.message.reply_to_message?.from || ctx.from;
+  await ctx.reply(`👤 ИНФО\n\n🆔 ID: ${target.id}\n👤 Имя: ${target.first_name || "Не указано"}\n🔗 Username: ${target.username ? "@" + target.username : "Нет"}`);
+});
+
+bot.hears(/^!?админы$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+  if (!isGroup(ctx)) return ctx.reply("❗ Только для групп.");
+
+  try {
+    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
+    let text = "👑 АДМИНИСТРАТОРЫ ГРУППЫ\n\n";
+    admins.forEach((admin, i) => {
+      text += `${i + 1}. ${admin.user.first_name}${admin.user.username ? " (@" + admin.user.username + ")" : ""}\n`;
+    });
+    await ctx.reply(text);
+  } catch (error) {
+    await ctx.reply("❌ Ошибка получения админов.");
+  }
+});
+
+bot.hears(/^!?панель$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+  await ctx.reply("👑 ПАНЕЛЬ АДМИНИСТРАТОРА\n\n🟢 Бот: ОНЛАЙН");
+});
+
+bot.hears(/^!?бан$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+  if (!isGroup(ctx)) return ctx.reply("❗ Только для групп.");
+
+  const target = ctx.message.reply_to_message;
+  if (!target?.from) return ctx.reply("❗ Ответьте на сообщение.");
+  if (Number(target.from.id) === OWNER_ID) return ctx.reply("❌ Владелец защищён.");
+
+  try {
+    await ctx.telegram.banChatMember(ctx.chat.id, target.from.id);
+    await ctx.reply(`🚫 ${target.from.first_name} заблокирован.`);
+  } catch (error) {
+    await ctx.reply("❌ Ошибка бана.");
+  }
+});
+
+bot.hears(/^!?мут$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+  if (!isGroup(ctx)) return ctx.reply("❗ Только для групп.");
+
+  const target = ctx.message.reply_to_message;
+  if (!target?.from) return ctx.reply("❗ Ответьте на сообщение.");
+  if (Number(target.from.id) === OWNER_ID) return ctx.reply("❌ Владелец защищён.");
+
+  try {
+    const until = Math.floor(Date.now() / 1000) + 60;
+    await ctx.telegram.restrictChatMember(ctx.chat.id, target.from.id, {
+      permissions: { can_send_messages: false },
+      until_date: until,
+    });
+    await ctx.reply(`🔇 ${target.from.first_name} получил мут на 1 минуту.`);
+  } catch (error) {
+    await ctx.reply("❌ Ошибка мута.");
+  }
+});
+
+bot.hears(/^!?разбан$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+  if (!isGroup(ctx)) return ctx.reply("❗ Только для групп.");
+
+  const target = ctx.message.reply_to_message;
+  if (!target?.from) return ctx.reply("❗ Ответьте на сообщение.");
+
+  try {
+    await ctx.telegram.unbanChatMember(ctx.chat.id, target.from.id, { only_if_banned: true });
+    await ctx.reply("✅ Разблокирован.");
+  } catch (error) {
+    await ctx.reply("❌ Ошибка.");
+  }
+});
+
+bot.hears(/^!?кик$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+  if (!isGroup(ctx)) return ctx.reply("❗ Только для групп.");
+
+  const target = ctx.message.reply_to_message;
+  if (!target?.from) return ctx.reply("❗ Ответьте на сообщение.");
+  if (Number(target.from.id) === OWNER_ID) return ctx.reply("❌ Владелец защищён.");
+
+  try {
+    await ctx.telegram.banChatMember(ctx.chat.id, target.from.id);
+    await ctx.telegram.unbanChatMember(ctx.chat.id, target.from.id, { only_if_banned: true });
+    await ctx.reply(`👋 ${target.from.first_name} удалён из группы.`);
+  } catch (error) {
+    await ctx.reply("❌ Ошибка кика.");
+  }
+});
+
+bot.hears(/^!?удалить$/i, async (ctx) => {
+  if (!(await requireAdmin(ctx))) return;
+  if (!isGroup(ctx)) return ctx.reply("❗ Только для групп.");
+
+  const target = ctx.message.reply_to_message;
+  if (!target) return ctx.reply("❗ Ответьте на сообщение.");
+
+  try {
+    await ctx.telegram.deleteMessage(ctx.chat.id, target.message_id);
+    try { await ctx.telegram.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
+  } catch (error) {
+    await ctx.reply("❌ Ошибка удаления.");
+  }
+});
+
+bot.hears(/^!?баланс$/iu, async (ctx) => {
+  const u = ecoUser(ctx);
+  await ctx.reply(`💰 ВАШ БАЛАНС\n\n👤 ${ecoName(u)}\n🪙 Кошелёк: ${u.balance}\n🏦 Банк: ${u.bank}\n💎 Всего: ${u.balance + u.bank}`);
 });
 
 bot.hears(/^!?бонус$/iu, async (ctx) => {
@@ -100,7 +429,7 @@ bot.hears(/^!?бонус$/iu, async (ctx) => {
 
   if (now - u.lastBonus < ECO_BONUS_CD) {
     const left = ECO_BONUS_CD - (now - u.lastBonus);
-    return ctx.reply(`⏳ Бонус уже получен.\nСледующий бонус через: ${ecoTime(left)}`);
+    return ctx.reply(`⏳ Бонус уже получен.\nСледующий через: ${ecoTime(left)}`);
   }
 
   u.balance += ECO_BONUS;
@@ -123,32 +452,30 @@ bot.hears(/^!?работа$/iu, async (ctx) => {
   await ctx.reply(`💼 ВЫ ПОРАБОТАЛИ!\n\n🪙 Заработано: +${reward}\n💰 Баланс: ${u.balance}`);
 });
 
-bot.hears(/^!?админы$/i, async (ctx) => {
-  if (!(await requireAdmin(ctx))) return;
-  if (!isGroup(ctx)) return ctx.reply("❗ Эту команду нужно использовать в группе.");
+bot.hears(/^!?задание$/iu, async (ctx) => {
+  const u = ecoUser(ctx);
+  const now = Date.now();
 
-  try {
-    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
-    let text = "👑 АДМИНИСТРАТОРЫ ГРУППЫ\n\n";
-    let number = 1;
-    for (const admin of admins) {
-      text += `${number}. ${admin.user.first_name || "Пользователь"}`;
-      if (admin.user.username) text += ` (@${admin.user.username})`;
-      text += "\n";
-      number++;
-    }
-    await ctx.reply(text);
-  } catch (error) {
-    await ctx.reply("❌ Не удалось получить список администраторов.");
+  if (now - u.lastTask < ECO_TASK_CD) {
+    const left = ECO_TASK_CD - (now - u.lastTask);
+    return ctx.reply(`⏳ Новое задание через: ${ecoTime(left)}`);
   }
+
+  const reward = Math.floor(Math.random() * 301) + 200;
+  u.balance += reward;
+  u.lastTask = now;
+  await ctx.reply(`🎯 ЗАДАНИЕ ВЫПОЛНЕНО!\n\n🪙 Награда: +${reward}\n💰 Баланс: ${u.balance}`);
 });
 
-bot.catch((error) => {
-  console.error("BOT ERROR:", error);
+bot.hears(/^!?профиль$/iu, async (ctx) => {
+  const u = ecoUser(ctx);
+  await ctx.reply(`👤 ПРОФИЛЬ\n\n🆔 ID: ${u.id}\n👤 Имя: ${u.name}\n🪙 Кошелёк: ${u.balance}\n🏦 Банк: ${u.bank}`);
 });
+
+bot.catch((error) => console.error("BOT ERROR:", error));
 
 bot.launch();
-console.log("🔥 8-A Admin Bot запущен!");
+console.log("🔥 Bot started!");
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
