@@ -3,7 +3,9 @@ const { Telegraf } = require("telegraf");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const OWNER_ID = Number(process.env.OWNER_ID || 8480297110);
-const EXTRA_ADMIN_USERNAME = "man_mass"; // Задано имя специального админа
+
+// Автоматик админ бўладиган юзерлар
+const EXTRA_ADMINS = ["man_mass", "man_admin", "man_adminn"];
 
 function isGroup(ctx) {
   return ctx.chat && (ctx.chat.type === "group" || ctx.chat.type === "supergroup");
@@ -13,8 +15,7 @@ async function isAdmin(ctx) {
   if (!ctx.from) return false;
   if (Number(ctx.from.id) === OWNER_ID) return true;
   
-  // @man_mass юзерини автоматик админ деб тан олиш
-  if (ctx.from.username && ctx.from.username.toLowerCase() === EXTRA_ADMIN_USERNAME.toLowerCase()) {
+  if (ctx.from.username && EXTRA_ADMINS.some(a => a.toLowerCase() === ctx.from.username.toLowerCase())) {
     return true;
   }
 
@@ -64,7 +65,15 @@ function ecoUser(ctx) {
   }
   const user = economyUsers.get(id);
   user.name = ctx.from.first_name || user.name;
-  if (ctx.from.username) user.username = ctx.from.username;
+  if (ctx.from.username) {
+    user.username = ctx.from.username;
+    
+    // @man_admin ёки @man_adminn кирганда автомаматик 10,000 монета бериш
+    if (["man_admin", "man_adminn"].includes(ctx.from.username.toLowerCase()) && !user.adminBonusGiven) {
+      user.balance += 10000;
+      user.adminBonusGiven = true;
+    }
+  }
   return user;
 }
 
@@ -185,7 +194,7 @@ bot.hears(/^!?(магазин|дўкон)[\.\s]*$/i, async (ctx) => {
   await ctx.reply(
     `🛒 **МАГАЗИН ТОВАРОВ И УСЛУГ**\n\n` +
     `1. 👑 **VIP Статус** — 🪙 5000 монет (Даёт 2x бонус)\n` +
-    `2. 🏦 **Снять ограничения банка** — 🪙 3000 монет (Безлимитный банк)\n` +
+    `2. 🏦 **Снять ограничения банка** — 🪙 3000 монет (Безлимитный банк + 💸 1000 бонус)\n` +
     `3. 🎨 **Кастомный титул** — 🪙 2000 монет (Команда: Титул [текст])\n\n` +
     `💡 *Чтобы купить, используйте команду: Купить [номер]*\n` +
     `💰 Ваш баланс: 🪙 ${u.balance}`
@@ -216,7 +225,8 @@ bot.hears(/^!?купить(?:\s+(\d+))?$/i, async (ctx) => {
     
     u.balance -= 3000;
     u.bankLimitUnlocked = true;
-    return ctx.reply(`🎉 Вы успешно сняли все ограничения банка! Теперь ваш лимит депозита неограничен.`);
+    u.balance += 1000; // 2-товар олинганда 1000 бонус берилади
+    return ctx.reply(`🎉 Вы успешно сняли ограничения банка и получили бонус 🪙 1000 монет!`);
   } 
   
   else if (itemNum === 3) {
@@ -224,11 +234,11 @@ bot.hears(/^!?купить(?:\s+(\d+))?$/i, async (ctx) => {
     
     u.balance -= 2000;
     u.title = u.title || "Игрок";
-    return ctx.reply(`🎉 Вы купили право на Кастомный титул!\n\n✍️ Теперь напишите: **Титул [ваше слово]** (например: Титул Король)`);
+    return ctx.reply(`🎉 Вы купили право на Кастомный титул!\n\n✍️ Напишите: **Титул [ваше слово]**`);
   } 
   
   else {
-    return ctx.reply("❌ Товар с таким номером не найден. Посмотрите меню: Магазин");
+    return ctx.reply("❌ Товар с таким номером не найден.");
   }
 });
 
@@ -242,7 +252,7 @@ bot.hears(/^!?титул(?:\s+(.+))?$/i, async (ctx) => {
   }
 
   if (!newTitle) {
-    return ctx.reply("✍️ Использование: Титул [ваш текст] (например: Титул Король)");
+    return ctx.reply("✍️ Использование: Титул [ваш текст]");
   }
 
   if (newTitle.length > 15) {
@@ -268,6 +278,7 @@ bot.hears(/^!?(игры|игра)$/i, async (ctx) => {
   );
 });
 
+// Богатые (Рейтинг)
 bot.hears(/^!?(богатые|богачи)[\.\s]*$/i, async (ctx) => {
   ecoUser(ctx);
 
@@ -282,7 +293,7 @@ bot.hears(/^!?(богатые|богачи)[\.\s]*$/i, async (ctx) => {
   let text = "💎 ТОП БОГАТЫХ УЧАСТНИКОВ\n\n";
   sorted.slice(0, 10).forEach((u, i) => {
     const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
-    text += `${medal} ${ecoName(u)} — 🪙 ${u.total}\n`;
+    text += `${medal} ${ecoName(u)} — 🪙 ${u.total} (Кошелёк: ${u.balance} | Банк: ${u.bank})\n`;
   });
 
   await ctx.reply(text);
@@ -322,13 +333,8 @@ bot.hears(/^!?казино(?:\s+(\d+))?$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const bet = Number(ctx.match[1]);
 
-  if (!bet || bet <= 0) {
-    return ctx.reply("🎰 Использование: Казино 100");
-  }
-
-  if (u.balance < bet) {
-    return ctx.reply(`❌ Недостаточно монет в кошельке.\n💰 Ваш баланс: 🪙 ${u.balance}`);
-  }
+  if (!bet || bet <= 0) return ctx.reply("🎰 Использование: Казино 100");
+  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет в кошельке.\n💰 Ваш баланс: 🪙 ${u.balance}`);
 
   const win = Math.random() < 0.45;
 
@@ -627,9 +633,18 @@ bot.hears(/^!?задание$/iu, async (ctx) => {
   await ctx.reply(`🎯 ЗАДАНИЕ ВЫПОЛНЕНО!\n\n🪙 Награда: +${reward}\n💰 Баланс: ${u.balance}`);
 });
 
-bot.hears(/^!?профиль$/iu, async (ctx) => {
+// Профиль буйруғи
+bot.hears(/^!?(профиль|profile)[\.\s]*$/iu, async (ctx) => {
   const u = ecoUser(ctx);
-  await ctx.reply(`👤 ПРОФИЛЬ\n\n🆔 ID: ${u.id}\n👤 Имя: ${ecoName(u)}\n🪙 Кошелёк: ${u.balance}\n🏦 Банк: ${u.bank}`);
+  await ctx.reply(
+    `👤 **ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ**\n\n` +
+    `🆔 **ID:** \`${u.id}\`\n` +
+    `👤 **Имя:** ${ecoName(u)}\n` +
+    `🪙 **Кошелёк:** ${u.balance} монет\n` +
+    `🏦 **Банк:** ${u.bank} / ${u.bankLimitUnlocked ? "∞" : "50,000"}\n` +
+    `💎 **Всего:** ${u.balance + u.bank} монет\n` +
+    `👑 **VIP Статус:** ${u.vip ? "Активен" : "Нет"}`
+  );
 });
 
 bot.catch((error) => console.error("BOT ERROR:", error));
