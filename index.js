@@ -51,7 +51,8 @@ function ecoUser(ctx) {
       lastTask: 0,
       vip: false,
       bankLimitUnlocked: false,
-      title: null
+      title: null,
+      lastInterest: Date.now()
     });
   }
   const user = economyUsers.get(id);
@@ -71,6 +72,25 @@ function ecoTime(ms) {
   const m = Math.floor((ms % 3600000) / 60000);
   return `${h} ч. ${m} мин.`;
 }
+
+// Банк фоизи (соатига 2%) автоматик ҳисоблаш
+setInterval(() => {
+  const now = Date.now();
+  economyUsers.forEach((user) => {
+    if (user.bank > 0) {
+      const hoursPassed = Math.floor((now - (user.lastInterest || now)) / (60 * 60 * 1000));
+      if (hoursPassed >= 1) {
+        const interest = Math.floor(user.bank * 0.02 * hoursPassed);
+        if (interest > 0) {
+          user.bank += interest;
+        }
+        user.lastInterest = now;
+      }
+    } else {
+      user.lastInterest = now;
+    }
+  });
+}, 5 * 60 * 1000);
 
 // Middleware
 bot.on("message", async (ctx, next) => {
@@ -103,13 +123,62 @@ bot.on("message", async (ctx, next) => {
   return next();
 });
 
+// Банк буйруқлари
+bot.hears(/^!?банк(?:\s+(положить|снять|депозит|пополнить))?(?:\s+(\d+|все))?$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const action = ctx.match[1]?.toLowerCase();
+  const amountArg = ctx.match[2]?.toLowerCase();
+
+  const maxBankLimit = u.bankLimitUnlocked ? Infinity : 50000;
+
+  if (!action) {
+    return ctx.reply(
+      `🏦 **БАНКОВСКИЙ СЧЁТ**\n\n` +
+      `🪙 Кошелёк: ${u.balance}\n` +
+      `🏦 В банке: ${u.bank} / ${u.bankLimitUnlocked ? "∞" : "50,000"}\n` +
+      `📈 Начисление: **2% в час** на остаток в банке!\n\n` +
+      `📥 **Положить:** Банк положить [сумма/все]\n` +
+      `📤 **Снять:** Банк снять [сумма/все]`
+    );
+  }
+
+  if (action === "положить" || action === "депозит" || action === "пополнить") {
+    let amount = amountArg === "все" ? u.balance : Number(amountArg);
+
+    if (!amount || amount <= 0) return ctx.reply("📥 Укажите сумму: Банк положить 1000 или Банк положить все");
+    if (u.balance < amount) return ctx.reply(`❌ У вас нет столько денег в кошельке. Баланс: 🪙 ${u.balance}`);
+
+    if (u.bank + amount > maxBankLimit) {
+      return ctx.reply(`❌ Превышен лимит банка (Макс: 🪙 ${maxBankLimit}). Купите снятие лимита в Магазине!`);
+    }
+
+    u.balance -= amount;
+    u.bank += amount;
+    u.lastInterest = Date.now();
+
+    return ctx.reply(`✅ Вы положили 🪙 ${amount} в банк.\n🏦 Баланс банка: 🪙 ${u.bank}\n🪙 В кошельке: 🪙 ${u.balance}`);
+  }
+
+  if (action === "снять") {
+    let amount = amountArg === "все" ? u.bank : Number(amountArg);
+
+    if (!amount || amount <= 0) return ctx.reply("📤 Укажите сумму: Банк снять 1000 или Банк снять все");
+    if (u.bank < amount) return ctx.reply(`❌ У вас нет столько денег в банке. В банке: 🪙 ${u.bank}`);
+
+    u.bank -= amount;
+    u.balance += amount;
+
+    return ctx.reply(`✅ Вы сняли 🪙 ${amount} из банка.\n🪙 В кошельке: 🪙 ${u.balance}\n🏦 Баланс банка: 🪙 ${u.bank}`);
+  }
+});
+
 // Магазин
 bot.hears(/^!?(магазин|дўкон)[\.\s]*$/i, async (ctx) => {
   const u = ecoUser(ctx);
   await ctx.reply(
     `🛒 **МАГАЗИН ТОВАРОВ И УСЛУГ**\n\n` +
     `1. 👑 **VIP Статус** — 🪙 5000 монет (Даёт 2x бонус)\n` +
-    `2. 🏦 **Снять ограничения банка** — 🪙 3000 монет\n` +
+    `2. 🏦 **Снять ограничения банка** — 🪙 3000 монет (Безлимитный банк)\n` +
     `3. 🎨 **Кастомный титул** — 🪙 2000 монет (Команда: Титул [текст])\n\n` +
     `💡 *Чтобы купить, используйте команду: Купить [номер]*\n` +
     `💰 Ваш баланс: 🪙 ${u.balance}`
@@ -140,7 +209,7 @@ bot.hears(/^!?купить(?:\s+(\d+))?$/i, async (ctx) => {
     
     u.balance -= 3000;
     u.bankLimitUnlocked = true;
-    return ctx.reply(`🎉 Вы успешно сняли все ограничения банка!`);
+    return ctx.reply(`🎉 Вы успешно сняли все ограничения банка! Теперь ваш лимит депозита неограничен.`);
   } 
   
   else if (itemNum === 3) {
@@ -185,6 +254,7 @@ bot.hears(/^!?(игры|игра)$/i, async (ctx) => {
     `🎰 Слот [ставка]\n` +
     `🎯 Рулетка [число] [ставка]\n` +
     `💎 Казино [ставка]\n\n` +
+    `🏦 **Банк:** Банк положить / Банк снять\n` +
     `💼 **Заработок:** Бонус, Работа, Задание, Богатые\n` +
     `🛒 **Покупки:** Магазин (команда: Магазин / Купить [номер])\n` +
     `💰 Ваш баланс: 🪙 ${u.balance}`
@@ -250,7 +320,7 @@ bot.hears(/^!?казино(?:\s+(\d+))?$/i, async (ctx) => {
   }
 
   if (u.balance < bet) {
-    return ctx.reply(`❌ Недостаточно монет.\n💰 Ваш баланс: 🪙 ${u.balance}`);
+    return ctx.reply(`❌ Недостаточно монет в кошельке.\n💰 Ваш баланс: 🪙 ${u.balance}`);
   }
 
   const win = Math.random() < 0.45;
@@ -335,11 +405,11 @@ bot.hears(/^!?рулетка(?:\s+(\d+))?(?:\s+(\d+))?$/i, async (ctx) => {
 });
 
 bot.hears(/^!?старт$/i, async (ctx) => {
-  await ctx.reply("🔥 8-A ADMIN BOT 🔥\n\nКоманды: топ, инфо, мойид, статистика, помощь, магазин, купить, титул, профиль, игры, богатые, перевести, правила");
+  await ctx.reply("🔥 8-A ADMIN BOT 🔥\n\nКоманды: топ, инфо, мойид, статистика, помощь, банк, магазин, купить, титул, профиль, игры, богатые, перевести, правила");
 });
 
 bot.hears(/^!?помощь$/i, async (ctx) => {
-  await ctx.reply("📚 Команды: топ, инфо, мойид, статистика, помощь, баланс, бонус, работа, магазин, купить, титул, профиль, игры, богатые, перевести, правила, кубик, слот, рулетка, казино");
+  await ctx.reply("📚 Команды: топ, инфо, мойид, статистика, помощь, банк, баланс, бонус, работа, магазин, купить, титул, профиль, игры, богатые, перевести, правила, кубик, слот, рулетка, казино");
 });
 
 bot.hears(/^!?правила$/i, async (ctx) => {
