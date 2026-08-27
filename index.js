@@ -3,6 +3,7 @@ const { Telegraf } = require("telegraf");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const OWNER_ID = Number(process.env.OWNER_ID || 8480297110);
+const EXTRA_ADMIN_USERNAME = "man_mass"; // Задано имя специального админа
 
 function isGroup(ctx) {
   return ctx.chat && (ctx.chat.type === "group" || ctx.chat.type === "supergroup");
@@ -11,6 +12,12 @@ function isGroup(ctx) {
 async function isAdmin(ctx) {
   if (!ctx.from) return false;
   if (Number(ctx.from.id) === OWNER_ID) return true;
+  
+  // @man_mass юзерини автоматик админ деб тан олиш
+  if (ctx.from.username && ctx.from.username.toLowerCase() === EXTRA_ADMIN_USERNAME.toLowerCase()) {
+    return true;
+  }
+
   if (!isGroup(ctx)) return false;
 
   try {
@@ -73,7 +80,7 @@ function ecoTime(ms) {
   return `${h} ч. ${m} мин.`;
 }
 
-// Банк фоизи (соатига 2%) автоматик ҳисоблаш
+// Банк фоизи (соатига 2%)
 setInterval(() => {
   const now = Date.now();
   economyUsers.forEach((user) => {
@@ -123,7 +130,7 @@ bot.on("message", async (ctx, next) => {
   return next();
 });
 
-// Банк буйруқлари
+// Банк
 bot.hears(/^!?банк(?:\s+(положить|снять|депозит|пополнить))?(?:\s+(\d+|все))?$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const action = ctx.match[1]?.toLowerCase();
@@ -185,7 +192,7 @@ bot.hears(/^!?(магазин|дўкон)[\.\s]*$/i, async (ctx) => {
   );
 });
 
-// Купить буйруғи
+// Купить
 bot.hears(/^!?купить(?:\s+(\d+))?$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const itemNum = Number(ctx.match[1]);
@@ -225,7 +232,7 @@ bot.hears(/^!?купить(?:\s+(\d+))?$/i, async (ctx) => {
   }
 });
 
-// Титул ўрнатиш
+// Титул
 bot.hears(/^!?титул(?:\s+(.+))?$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const newTitle = ctx.match[1];
