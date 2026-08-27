@@ -43,10 +43,11 @@ bot.on("message", async (ctx, next) => {
       "помощь", "!помощь", "админы", "!админы", "панель", "!панель",
       "бан", "!бан", "мут", "!мут", "разбан", "!разбан",
       "кик", "!кик", "удалить", "!удалить", "старт", "!старт",
-      "статистика", "!статистика", "магазин", "!магазин", "профиль", "!профиль"
+      "статистика", "!статистика", "магазин", "!магазин", "профиль", "!профиль",
+      "правила", "!правила", "кубик", "!кубик"
     ];
 
-    if (commands.includes(command)) return next();
+    if (commands.some(cmd => command.startsWith(cmd))) return next();
 
     const now = Date.now();
     const limit = now - 24 * 60 * 60 * 1000;
@@ -122,7 +123,9 @@ bot.hears(/^!?старт$/i, async (ctx) => {
       "статистика — статистика группы\n" +
       "помощь — список команд\n" +
       "магазин — VIP statuslar do'koni\n" +
-      "профиль — ваш профиль\n\n" +
+      "профиль — ваш профиль\n" +
+      "правила — правила группы\n" +
+      "кубик [ставка] — игра в кости\n\n" +
       "👑 Команды администраторов:\n" +
       "бан, мут, разбан, кик, удалить, админы"
   );
@@ -132,10 +135,51 @@ bot.hears(/^!?помощь$/i, async (ctx) => {
   await ctx.reply(
     "📚 ДОСТУПНЫЕ КОМАНДЫ\n\n" +
       "👤 Для всех:\n" +
-      "топ, инфо, мойид, статистика, помощь, баланс, бонус, работа, магазин, профиль, игра\n\n" +
+      "топ, инфо, мойид, статистика, помощь, баланс, бонус, работа, магазин, профиль, игра, правила, кубик [ставка]\n\n" +
       "👑 Для администраторов:\n" +
       "бан, мут, разбан, кик, удалить, админы, панель"
   );
+});
+
+bot.hears(/^!?правила$/i, async (ctx) => {
+  await ctx.reply(
+    "📜 ПРАВИЛА ГРУППЫ\n\n" +
+      "1. Оскорбления и ненормативная лексика запрещены.\n" +
+      "2. Спам и реклама без разрешения запрещены.\n" +
+      "3. Уважайте участникoв и администрацию группы!"
+  );
+});
+
+bot.hears(/^!?кубик(?:\s+(\d+))?$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[1]);
+
+  if (!bet || bet <= 0) {
+    return ctx.reply("🎲 Использование: Кубик 100 (укажите сумму ставки)");
+  }
+
+  if (u.balance < bet) {
+    return ctx.reply(`❌ Недостаточно монет для ставки.\n💰 Ваш баланс: 🪙 ${u.balance}`);
+  }
+
+  const userDice = Math.floor(Math.random() * 6) + 1;
+  const botDice = Math.floor(Math.random() * 6) + 1;
+
+  if (userDice > botDice) {
+    u.balance += bet;
+    await ctx.reply(
+      `🎲 ИГРА В КОСТИ\n\n👤 Ваш бросок: ${userDice}\n🤖 Бросок бота: ${botDice}\n\n🎉 Вы выиграли! +🪙 ${bet}\n💰 Ваш баланс: 🪙 ${u.balance}`
+    );
+  } else if (userDice < botDice) {
+    u.balance -= bet;
+    await ctx.reply(
+      `🎲 ИГРА В КОСТИ\n\n👤 Ваш бросок: ${userDice}\n🤖 Бросок бота: ${botDice}\n\n😔 Вы проиграли! -🪙 ${bet}\n💰 Ваш баланс: 🪙 ${u.balance}`
+    );
+  } else {
+    await ctx.reply(
+      `🎲 ИГРА В КОСТИ\n\n👤 Ваш бросок: ${userDice}\n🤖 Бросок бота: ${botDice}\n\n🤝 Ничья! Ставка возвращена.\n💰 Ваш баланс: 🪙 ${u.balance}`
+    );
+  }
 });
 
 bot.hears(/^!?мойид$/i, async (ctx) => {
@@ -333,11 +377,6 @@ bot.hears(/^!?баланс$/iu, async (ctx) => {
   );
 });
 
-bot.hears(/^!?монеты$/iu, async (ctx) => {
-  const u = ecoUser(ctx);
-  await ctx.reply(`🪙 У вас ${u.balance} монет.`);
-});
-
 bot.hears(/^!?бонус$/iu, async (ctx) => {
   const u = ecoUser(ctx);
   const now = Date.now();
@@ -402,45 +441,6 @@ bot.hears(/^!?профиль$/iu, async (ctx) => {
   );
 });
 
-bot.hears(/^!?богатые$/iu, async (ctx) => {
-  if (economyUsers.size === 0) return ctx.reply("📊 Пока нет пользователей.");
-
-  const top = [...economyUsers.values()]
-    .sort((a, b) => b.balance + b.bank - (a.balance + a.bank))
-    .slice(0, 10);
-
-  let text = "🏆 БОГАТЕЙШИЕ ПОЛЬЗОВАТЕЛИ\n\n";
-  top.forEach((u, i) => {
-    text += `${i + 1}. ${ecoName(u)} — 🪙 ${u.balance + u.bank}\n`;
-  });
-  await ctx.reply(text);
-});
-
-bot.hears(/^!?перевод(?:\s+(\d+))?$/iu, async (ctx) => {
-  const amount = Number(ctx.match?.[1]);
-  if (!amount || amount <= 0) {
-    return ctx.reply("💸 Использование: Ответьте на сообщение и напишите: Перевод 500");
-  }
-
-  const target = ctx.message.reply_to_message;
-  if (!target?.from) return ctx.reply("❗ Ответьте на сообщение пользователя.");
-  if (target.from.id === ctx.from.id) return ctx.reply("❌ Нельзя переводить самому себе.");
-
-  const from = ecoUser(ctx);
-  const to = ecoUser({ from: target.from });
-
-  if (from.balance < amount) {
-    return ctx.reply(`❌ Недостаточно монет.\n💰 У вас: ${from.balance}`);
-  }
-
-  from.balance -= amount;
-  to.balance += amount;
-
-  await ctx.reply(
-    `💸 ПЕРЕДАЧА ВЫПОЛНЕНА!\n\n👤 Получатель: ${ecoName(to)}\n🪙 Сумма: ${amount}\n💰 Ваш баланс: ${from.balance}`
-  );
-});
-
 bot.hears(/^!?магазин$/i, async (ctx) => {
   const u = ecoUser(ctx);
 
@@ -491,72 +491,6 @@ bot.hears(/^!?купить\s*([123])$/i, async (ctx) => {
       u.vip.expires
     ).toLocaleString("ru-RU")}\n\n💰 Остаток: 🪙 ${u.balance}`
   );
-});
-
-bot.hears(/^!?игра$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-
-  await ctx.reply(`🎮 ИГРА\n\n💰 Ваш баланс: 🪙 ${u.balance}\n\nВыберите действие:`, {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: "📜 Правила", callback_data: "game_rules" },
-          { text: "💰 Баланс", callback_data: "game_balance" },
-        ],
-        [
-          { text: "🎁 Бонус", callback_data: "game_bonus" },
-          { text: "💼 Работа", callback_data: "game_work" },
-        ],
-      ],
-    },
-  });
-});
-
-bot.action("game_rules", async (ctx) => {
-  await ctx.answerCbQuery();
-  await ctx.reply("📜 ПРАВИЛА ИГРЫ\n\nВ игре используется внутренняя валюта бота.");
-});
-
-bot.action("game_balance", async (ctx) => {
-  await ctx.answerCbQuery();
-  const u = ecoUser(ctx);
-  await ctx.reply(`💰 ВАШ БАЛАНС\n\n🪙 ${u.balance} монет`);
-});
-
-bot.action("game_bonus", async (ctx) => {
-  await ctx.answerCbQuery();
-  await ctx.reply("🎁 Бонус olish uchun chatga `бонус` deb yozing.");
-});
-
-bot.action("game_work", async (ctx) => {
-  await ctx.answerCbQuery();
-  await ctx.reply("💼 Ishlash uchun chatga `работа` deb yozing.");
-});
-
-const badWords = ["dalbaeb", "долбаеб", "долбоеб", "suka", "сука", "бля", "блять"];
-
-bot.on("message", async (ctx, next) => {
-  try {
-    if (!ctx.from || ctx.from.is_bot || !isGroup(ctx)) return next();
-    if (await isAdmin(ctx)) return next();
-
-    const text = (ctx.message?.text || ctx.message?.caption || "").toLowerCase();
-    if (!text) return next();
-
-    if (badWords.some((word) => text.includes(word))) {
-      try { await ctx.telegram.deleteMessage(ctx.chat.id, ctx.message.message_id); } catch {}
-      const until = Math.floor(Date.now() / 1000) + 60;
-      await ctx.telegram.restrictChatMember(ctx.chat.id, ctx.from.id, {
-        permissions: { can_send_messages: false },
-        until_date: until,
-      });
-      await ctx.telegram.sendMessage(
-        ctx.chat.id,
-        `⚠️ ${ctx.from.first_name || "Пользователь"} получил мут на 1 минуту за мат.`
-      );
-    }
-  } catch (e) {}
-  return next();
 });
 
 bot.catch((error) => {
