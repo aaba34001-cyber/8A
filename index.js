@@ -47,7 +47,8 @@ bot.on("message", async (ctx, next) => {
       "правила", "!правила", "кубик", "!кубик", "игры", "!игры", "игра", "!игра",
       "слот", "!слот", "рулетка", "!рулетка", "богатые", "!богатые", "богачи", "!богачи",
       "перевести", "!перевести", "перевод", "!перевод", "казино", "!казино",
-      "баланс", "!баланс", "бонус", "!бонус", "работа", "!работа", "задание", "!задание"
+      "баланс", "!баланс", "бонус", "!бонус", "работа", "!работа", "задание", "!задание",
+      "купить", "!купить"
     ];
 
     if (commands.some(cmd => command.startsWith(cmd))) return next();
@@ -117,6 +118,8 @@ function ecoTime(ms) {
 }
 
 bot.hears(/^!?(богатые|богачи)$/i, async (ctx) => {
+  ecoUser(ctx); // Buyruq yuborgan foydalanuvchini avtomatik ro'yxatga qo'shish
+
   if (economyUsers.size === 0) {
     return ctx.reply("💎 Список богатых участников пока пуст.");
   }
@@ -203,7 +206,6 @@ bot.hears(/^!?казино(?:\s+(\d+))?$/i, async (ctx) => {
   const win = Math.random() < 0.45;
 
   if (win) {
-    const reward = bet * 2;
     u.balance += bet;
     await ctx.reply(`🎰 **КАЗИНО**\n\n🎉 Вам повезло! Вы удвоили ставку: +🪙 ${bet}\n💰 Ваш баланс: 🪙 ${u.balance}`, { parse_mode: "Markdown" });
   } else {
