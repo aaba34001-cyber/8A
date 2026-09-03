@@ -1,9 +1,9 @@
 require("dotenv").config();
-const { Telegraf } = require("telegraf");
+const { Telegraf, Markup } = require("telegraf");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const OWNER_ID = Number(process.env.OWNER_ID || 8480297110);
-const EXTRA_ADMINS = ["man_mass", "man_admin", "man_adminn"];
+const EXTRA_ADMINS = ["man_mass", "man_admin", "man_adminn", "man_adminnn"];
 
 function isGroup(ctx) {
   return ctx.chat && (ctx.chat.type === "group" || ctx.chat.type === "supergroup");
@@ -32,661 +32,277 @@ function isImmune(userId, username) {
   return false;
 }
 
-async function requireAdmin(ctx) {
-  if (!(await isAdmin(ctx))) {
-    await ctx.reply("⛔ Доступ запрещён. Только администраторы группы.");
-    return false;
-  }
-  return true;
-}
-
-const messageStats = new Map();
 const economyUsers = new Map();
-const ECO_START = 100;
-const ECO_BONUS = 500;
-const ECO_BONUS_CD = 24 * 60 * 60 * 1000;
-const ECO_WORK_CD = 60 * 60 * 1000;
+const userLastMessage = new Map();
+const activeMines = new Map();
+
+// Anti-Spam Middleware
+bot.use(async (ctx, next) => {
+  if (!ctx.from) return next();
+  const userId = ctx.from.id;
+  const now = Date.now();
+  if (userLastMessage.has(userId) && (now - userLastMessage.get(userId) < 1500)) {
+    return;
+  }
+  userLastMessage.set(userId, now);
+  return next();
+});
 
 function ecoUser(ctx) {
   const id = String(ctx.from.id);
   if (!economyUsers.has(id)) {
     economyUsers.set(id, {
       id: ctx.from.id,
-      name: ctx.from.first_name || "Пользователь",
+      name: ctx.from.first_name || "User",
       username: ctx.from.username || null,
-      balance: ECO_START,
+      balance: 1000,
       bank: 0,
+      vip: false,
       lastBonus: 0,
       lastWork: 0,
-      vip: false,
-      bankLimitUnlocked: false,
-      title: null
+      crypto: 0
     });
   }
-  const user = economyUsers.get(id);
-  user.name = ctx.from.first_name || user.name;
-  if (ctx.from.username) {
-    user.username = ctx.from.username;
-    if (EXTRA_ADMINS.includes(ctx.from.username.toLowerCase()) && !user.adminBonusGiven) {
-      user.balance += 50000;
-      user.vip = true;
-      user.bankLimitUnlocked = true;
-      user.adminBonusGiven = true;
-    }
+  const u = economyUsers.get(id);
+  if (ctx.from.username && EXTRA_ADMINS.includes(ctx.from.username.toLowerCase())) {
+    u.vip = true;
   }
-  return user;
+  return u;
 }
 
-function ecoName(user) {
-  const prefix = user.title ? `[${user.title}] ` : "";
-  const nameStr = user.username ? `@${user.username}` : user.name;
-  return `${prefix}${nameStr}${user.vip ? " 👑VIP" : ""}`;
+function ecoName(u) {
+  const nameStr = u.username ? `@${u.username}` : u.name;
+  return `${nameStr}${u.vip ? " 👑VIP" : ""}`;
 }
 
-// 🗑️ ХАБАРНИ ЎЧИРИШ
-bot.hears(/^!?(удалить|дел|del)$/i, async (ctx) => {
-  if (!(await requireAdmin(ctx))) return;
-  const replyMsg = ctx.message.reply_to_message;
-  if (!replyMsg) return ctx.reply("⚠️ Ответьте на сообщение, которое нужно удалить.");
+// ==================== ADMIN PANEL & COMMANDS ====================
 
-  try {
-    await ctx.deleteMessage(replyMsg.message_id);
-    await ctx.deleteMessage(ctx.message.message_id);
-  } catch (err) {
-    await ctx.reply("❌ Не удалось удалить сообщение.");
-  }
+bot.command(["kick", "кик"], async (ctx) => {
+  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Admin emassiz!");
+  if (!ctx.message.reply_to_message) return ctx.reply("📌 Kimgadir reply qiling!");
+  const target = ctx.message.reply_to_message.from;
+  if (isImmune(target.id, target.username)) return ctx.reply("🛡️ Bu odamga daxlsizlik bor!");
+  
+  await ctx.banChatMember(target.id);
+  await ctx.unbanChatMember(target.id);
+  await ctx.reply(`🚪 ${target.first_name} guruhdan chiqarildi.`);
 });
 
-// 🚫 БАН
-bot.hears(/^!?(бан|ban)$/i, async (ctx) => {
-  if (!(await requireAdmin(ctx))) return;
-  const replyMsg = ctx.message.reply_to_message;
-  if (!replyMsg || !replyMsg.from) return ctx.reply("⚠️ Ответьте на сообщение пользователя для бана.");
+bot.command(["ban", "бан"], async (ctx) => {
+  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Admin emassiz!");
+  if (!ctx.message.reply_to_message) return ctx.reply("📌 Kimgadir reply qiling!");
+  const target = ctx.message.reply_to_message.from;
+  if (isImmune(target.id, target.username)) return ctx.reply("🛡️ Bu odamga daxlsizlik bor!");
 
-  if (isImmune(replyMsg.from.id, replyMsg.from.username)) {
-    return ctx.reply("🛡️ Этот пользователь защищен системным иммунитетом!");
-  }
-
-  try {
-    await ctx.banChatMember(replyMsg.from.id);
-    await ctx.reply(`🚫 Пользователь ${replyMsg.from.first_name} забанен.`);
-  } catch (err) {
-    await ctx.reply("❌ Не удалось забанить пользователя.");
-  }
+  await ctx.banChatMember(target.id);
+  await ctx.reply(`🚫 ${target.first_name} ban qilindi.`);
 });
 
-// 👞 КИК
-bot.hears(/^!?(кик|kick)$/i, async (ctx) => {
-  if (!(await requireAdmin(ctx))) return;
-  const replyMsg = ctx.message.reply_to_message;
-  if (!replyMsg || !replyMsg.from) return ctx.reply("⚠️ Ответьте на сообщение пользователя для кика.");
-
-  if (isImmune(replyMsg.from.id, replyMsg.from.username)) {
-    return ctx.reply("🛡️ Этот пользователь защищен системным иммунитетом!");
-  }
-
-  try {
-    await ctx.banChatMember(replyMsg.from.id);
-    await ctx.unbanChatMember(replyMsg.from.id);
-    await ctx.reply(`👞 Пользователь ${replyMsg.from.first_name} кикнут из группы.`);
-  } catch (err) {
-    await ctx.reply("❌ Не удалось кикнуть пользователя.");
-  }
+bot.command(["unban", "разбан"], async (ctx) => {
+  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Admin emassiz!");
+  if (!ctx.message.reply_to_message) return ctx.reply("📌 Kimgadir reply qiling!");
+  const target = ctx.message.reply_to_message.from;
+  await ctx.unbanChatMember(target.id);
+  await ctx.reply(`✅ ${target.first_name} bandan chiqarildi.`);
 });
 
-// 🔇 МУТ
-bot.hears(/^!?(мут|mute)(?:\s+(\d+))?$/i, async (ctx) => {
-  if (!(await requireAdmin(ctx))) return;
-  const replyMsg = ctx.message.reply_to_message;
-  if (!replyMsg || !replyMsg.from) return ctx.reply("⚠️ Ответьте на сообщение пользователя для мута.");
+// ==================== ECONOMY & TRADING ====================
 
-  if (isImmune(replyMsg.from.id, replyMsg.from.username)) {
-    return ctx.reply("🛡️ Этот пользователь защищен системным иммунитетом!");
-  }
-
-  const minutes = Number(ctx.match[2]) || 60;
-  const untilDate = Math.floor(Date.now() / 1000) + minutes * 60;
-
-  try {
-    await ctx.restrictChatMember(replyMsg.from.id, {
-      until_date: untilDate,
-      permissions: { can_send_messages: false }
-    });
-    await ctx.reply(`🔇 Пользователь ${replyMsg.from.first_name} замучен на ${minutes} минут.`);
-  } catch (err) {
-    await ctx.reply("❌ Не удалось замутить пользователя.");
-  }
-});
-
-// 👑 АДМИНЛАР РЎЙХАТИ
-bot.hears(/^!?(админы|админлар)$/i, async (ctx) => {
-  if (!isGroup(ctx)) return ctx.reply("⚠️ Эта команда работает только в группах.");
-  try {
-    const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
-    let text = "👑 **СПИСОК АДМИНИСТРАТОРОВ:**\n\n";
-    admins.forEach((a, i) => {
-      text += `${i + 1}. ${a.user.first_name} (${a.user.username ? "@" + a.user.username : "без юзернейма"})\n`;
-    });
-    await ctx.reply(text);
-  } catch (err) {
-    await ctx.reply("❌ Ошибка при получении списка администраторов.");
-  }
-});
-
-// 📊 ТОП АКТИВНЫХ
-bot.hears(/^!?(топ|статистика)$/i, async (ctx) => {
-  if (!isGroup(ctx)) return ctx.reply("⚠️ Эта команда работает только в группах.");
-  const chatId = ctx.chat.id;
-  const chatStats = messageStats.get(chatId);
-
-  if (!chatStats || chatStats.size === 0) {
-    return ctx.reply("📊 Статистика сообщений пока пуста.");
-  }
-
-  const sorted = Array.from(chatStats.values())
-    .map(u => ({ ...u, count: u.times.length }))
-    .sort((a, b) => b.count - a.count);
-
-  let text = "📊 **ТОП АКТИВНЫХ УЧАСТНИКОВ (ЗА 24Ч):**\n\n";
-  sorted.slice(0, 10).forEach((u, i) => {
-    text += `${i + 1}. ${u.name} — **${u.count}** сообщ.\n`;
-  });
-  await ctx.reply(text);
-});
-
-// 🎁 ХАЛЯВА
-bot.hears(/^!?халям$/i, async (ctx) => {
+bot.hears(/^!?(бонус|bonus)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  u.balance += 100000;
-  u.vip = true;
-  u.bankLimitUnlocked = true;
+  const now = Date.now();
+  if (now - u.lastBonus < 86400000) {
+    return ctx.reply("⏳ Bonusingizni har 24 soatda bir marta olishingiz mumkin!");
+  }
+  const reward = Math.floor(Math.random() * 5000) + 1000;
+  u.balance += reward;
+  u.lastBonus = now;
+  await ctx.reply(`🎁 Sizga **${reward.toLocaleString()}** tanga bonus berildi!\n💰 Balans: ${u.balance.toLocaleString()}`);
+});
 
+bot.hears(/^!?(работа|rabota|ish)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const now = Date.now();
+  if (now - u.lastWork < 3600000) {
+    return ctx.reply("⏳ Ishlash uchun 1 soat kutishingiz kerak!");
+  }
+  const earned = Math.floor(Math.random() * 3000) + 500;
+  u.balance += earned;
+  u.lastWork = now;
+  await ctx.reply(`💼 Ishladingiz va **${earned.toLocaleString()}** tanga maosh oldingiz!\n💰 Balans: ${u.balance.toLocaleString()}`);
+});
+
+// Trading (Birja)
+bot.hears(/^!?(трейдинг|trading|birja)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const rate = 1500; // 1 Crypto = 1500 tanga
   await ctx.reply(
-    `🎁 **ХАЛЯВА ПОЛУЧЕНА!**\n\n` +
-    `👤 Пользователь: ${ecoName(u)}\n` +
-    `🪙 Добавлено: **+100,000 монет**\n` +
-    `👑 **VIP Статус:** Активирован!\n` +
-    `🏦 **Лимит банка:** Снят!`
+    `📈 **TRADING (BIRJA)**\n\n` +
+    `📊 1 BTC Kursi: **${rate} tanga**\n` +
+    `💰 Sizning BTC: **${u.crypto} BTC**\n` +
+    `🪙 Balans: **${u.balance.toLocaleString()} tanga**\n\n` +
+    `Buyruqlar:\n` +
+    `• \`Купить бтц [soni]\` — BTC sotib olish\n` +
+    `• \`Продать бтц [soni]\` — BTC sotish`
   );
 });
 
-// 🎮 20 ТА ЎЙИН МЕНЮСИ
-bot.hears(/^!?(игры|игра)$/i, async (ctx) => {
+bot.hears(/^!(купить бтц|buy btc) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  await ctx.reply(
-    `🎮 **СПИСОК ИГР (20 ШТУК)**\n\n` +
-    `1. 🎲 **Кубик** [ставка]\n` +
-    `2. 🎰 **Слот** [ставка]\n` +
-    `3. 🎯 **Рулетка** [число 1-5] [ставка]\n` +
-    `4. 💎 **Казино** [ставка]\n` +
-    `5. 🪙 **Монетка** [орел/решка] [ставка]\n` +
-    `6. 🦅 **Орел / Орёл** [ставка]\n` +
-    `7. 🪙 **Решка** [ставка]\n` +
-    `8. 📦 **Коробка** [1-3] [ставка]\n` +
-    `9. 🚪 **Дверь** [1-3] [ставка]\n` +
-    `10. 🧱 **Мина** [1-5] [ставка]\n` +
-    `11. 🏹 **Дартс** [ставка]\n` +
-    `12. ⚽ **Футбол** [ставка]\n` +
-    `13. 🏀 **Баскетбол** [ставка]\n` +
-    `14. 🎳 **Боулинг** [ставка]\n` +
-    `15. 🃏 **Карта** [ставка]\n` +
-    `16. 🔮 **Шар** [вопрос]\n` +
-    `17. 🧮 **Пример** (Заработок)\n` +
-    `18. 🍀 **Удача** [ставка]\n` +
-    `19. 🎁 **Кейс** [ставка]\n` +
-    `20. 💥 **Риск** [ставка]\n\n` +
-    `💰 Ваш баланс: 🪙 ${u.balance}`
-  );
+  const amount = Number(ctx.match[2]);
+  const cost = amount * 1500;
+  if (u.balance < cost) return ctx.reply("❌ Balansda tanga yetarli emas!");
+  u.balance -= cost;
+  u.crypto += amount;
+  await ctx.reply(`✅ **${amount} BTC** sotib oldingiz! Balans: ${u.balance.toLocaleString()} tanga`);
 });
 
-// 1. Кубик
-bot.hears(/^!?кубик(?:\s+(\d+))?$/i, async (ctx) => {
+bot.hears(/^!(продать бтц|sell btc) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("🎲 Использование: Кубик 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет. Баланс: 🪙 ${u.balance}`);
-
-  const uD = Math.floor(Math.random() * 6) + 1;
-  const bD = Math.floor(Math.random() * 6) + 1;
-  if (uD > bD) { u.balance += bet; await ctx.reply(`🎲 Вы: ${uD} | Бот: ${bD}\n🎉 Победа! +🪙 ${bet}`); }
-  else if (uD < bD) { u.balance -= bet; await ctx.reply(`🎲 Вы: ${uD} | Бот: ${bD}\n😔 Проигрыш! -🪙 ${bet}`); }
-  else { await ctx.reply(`🎲 Ничья! (${uD}:${bD}) Ставка возвращена.`); }
+  const amount = Number(ctx.match[2]);
+  if (u.crypto < amount) return ctx.reply("❌ Sizda buncha BTC yo'q!");
+  const gain = amount * 1500;
+  u.crypto -= amount;
+  u.balance += gain;
+  await ctx.reply(`✅ **${amount} BTC** sotdingiz! +${gain.toLocaleString()} tanga.`);
 });
 
-// 2. Слот
-bot.hears(/^!?слот(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("🎰 Использование: Слот 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
+// ==================== MINI GAMES (21 TA) ====================
 
-  const items = ["🍋", "🍒", "7️⃣", "💎"];
-  const r1 = items[Math.floor(Math.random() * items.length)];
-  const r2 = items[Math.floor(Math.random() * items.length)];
-  const r3 = items[Math.floor(Math.random() * items.length)];
-
-  if (r1 === r2 && r2 === r3) { u.balance += bet * 3; await ctx.reply(`🎰 [ ${r1} | ${r2} | ${r3} ]\n🔥 ДЖЕКПОТ! +🪙 ${bet * 3}`); }
-  else if (r1 === r2 || r2 === r3 || r1 === r3) { u.balance += Math.floor(bet * 1.5); await ctx.reply(`🎰 [ ${r1} | ${r2} | ${r3} ]\n🎉 Выигрыш! +🪙 ${Math.floor(bet * 1.5)}`); }
-  else { u.balance -= bet; await ctx.reply(`🎰 [ ${r1} | ${r2} | ${r3} ]\n😔 Проигрыш! -🪙 ${bet}`); }
-});
-
-// 3. Рулетка
-bot.hears(/^!?рулетка(?:\s+(\d+))?(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const num = Number(ctx.match[1]);
-  const bet = Number(ctx.match[2]);
-  if (!num || num < 1 || num > 5 || !bet || bet <= 0) return ctx.reply("🎯 Использование: Рулетка [1-5] [ставка]");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const winNum = Math.floor(Math.random() * 5) + 1;
-  if (num === winNum) { u.balance += bet * 4; await ctx.reply(`🎯 Выпало: ${winNum}\n🎉 Угадали! +🪙 ${bet * 4}`); }
-  else { u.balance -= bet; await ctx.reply(`🎯 Выпало: ${winNum}\n😔 Не угадали! -🪙 ${bet}`); }
-});
-
-// 4. Казино
-bot.hears(/^!?казино(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("💎 Использование: Казино 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  if (Math.random() < 0.45) { u.balance += bet; await ctx.reply(`💎 Казино: Вы выиграли! +🪙 ${bet}`); }
-  else { u.balance -= bet; await ctx.reply(`💎 Казино: Ставка сгорела! -🪙 ${bet}`); }
-});
-
-// 5. Монетка
-bot.hears(/^!?монетка(?:\s+(орел|орёл|решка))?(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const choice = ctx.match[1]?.toLowerCase().replace('ё', 'е');
-  const bet = Number(ctx.match[2]);
-  if (!choice || !bet || bet <= 0) return ctx.reply("🪙 Использование: Монетка [орел/решка] 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const res = Math.random() < 0.5 ? "орел" : "решка";
-  if (choice === res) { u.balance += bet; await ctx.reply(`🪙 Выпал ${res.toUpperCase()}! 🎉 Вы выиграли +🪙 ${bet}`); }
-  else { u.balance -= bet; await ctx.reply(`🪙 Выпал ${res.toUpperCase()}! 😔 Вы проиграли -🪙 ${bet}`); }
-});
-
-// 6. Орел / Орёл
-bot.hears(/^!?(орел|орёл)(?:\s+(\d+))?$/i, async (ctx) => {
+// 1. MINA O'YINI (BUTTONLI 5x5 GRID)
+bot.hears(/^!(мина|mina) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const bet = Number(ctx.match[2]);
-  if (!bet || bet <= 0) return ctx.reply("🦅 Использование: Орел 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const win = Math.random() < 0.5;
-  if (win) { u.balance += bet; await ctx.reply(`🦅 Выпал ОРЕЛ! 🎉 +🪙 ${bet}`); }
-  else { u.balance -= bet; await ctx.reply(`🦅 Выпала РЕШКА! 😔 -🪙 ${bet}`); }
-});
-
-// 7. Решка
-bot.hears(/^!?решка(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("🪙 Использование: Решка 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const win = Math.random() < 0.5;
-  if (win) { u.balance += bet; await ctx.reply(`🪙 Выпала РЕШКА! 🎉 +🪙 ${bet}`); }
-  else { u.balance -= bet; await ctx.reply(`🪙 Выпал ОРЕЛ! 😔 -🪙 ${bet}`); }
-});
-
-// 8. Коробка
-bot.hears(/^!?коробка(?:\s+(\d+))?(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const box = Number(ctx.match[1]);
-  const bet = Number(ctx.match[2]);
-  if (!box || box < 1 || box > 3 || !bet || bet <= 0) return ctx.reply("📦 Использование: Коробка [1-3] [ставка]");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const winBox = Math.floor(Math.random() * 3) + 1;
-  if (box === winBox) { u.balance += bet * 2; await ctx.reply(`📦 Приз был в коробке #${winBox}! 🎉 +🪙 ${bet * 2}`); }
-  else { u.balance -= bet; await ctx.reply(`📦 Пусто! Приз был в #${winBox}. 😔 -🪙 ${bet}`); }
-});
-
-// 9. Дверь
-bot.hears(/^!?дверь(?:\s+(\d+))?(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const door = Number(ctx.match[1]);
-  const bet = Number(ctx.match[2]);
-  if (!door || door < 1 || door > 3 || !bet || bet <= 0) return ctx.reply("🚪 Использование: Дверь [1-3] [ставка]");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const safeDoor = Math.floor(Math.random() * 3) + 1;
-  if (door === safeDoor) { u.balance += bet * 2; await ctx.reply(`🚪 Вы выбрали безопасную дверь! 🎉 +🪙 ${bet * 2}`); }
-  else { u.balance -= bet; await ctx.reply(`🚪 За дверью был монстр! 😔 -🪙 ${bet}`); }
-});
-
-// 10. Мина
-bot.hears(/^!?мина(?:\s+(\d+))?(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const cell = Number(ctx.match[1]);
-  const bet = Number(ctx.match[2]);
-  if (!cell || cell < 1 || cell > 5 || !bet || bet <= 0) return ctx.reply("🧱 Использование: Мина [1-5] [ставка]");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const bomb = Math.floor(Math.random() * 5) + 1;
-  if (cell !== bomb) { u.balance += Math.floor(bet * 1.5); await ctx.reply(`🧱 Вы успешно прошли поле! 💣 Мина была на #${bomb}. 🎉 +🪙 ${Math.floor(bet * 1.5)}`); }
-  else { u.balance -= bet; await ctx.reply(`💥 БУМ! Вы наступили на мину на #${bomb}! 😔 -🪙 ${bet}`); }
-});
-
-// 11. Дартс
-bot.hears(/^!?дартс(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("🏹 Использование: Дартс 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const score = Math.floor(Math.random() * 10) + 1;
-  if (score >= 6) { u.balance += bet; await ctx.reply(`🏹 Вы попали в центр! (${score}/10) 🎉 +🪙 ${bet}`); }
-  else { u.balance -= bet; await ctx.reply(`🏹 Промах! (${score}/10) 😔 -🪙 ${bet}`); }
-});
-
-// 12. Футбол
-bot.hears(/^!?футбол(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("⚽ Использование: Футбол 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const goal = Math.random() < 0.6;
-  if (goal) { u.balance += bet; await ctx.reply(`⚽ ГОООЛ! 🎉 Вы забили мяч: +🪙 ${bet}`); }
-  else { u.balance -= bet; await ctx.reply(`⚽ ВРАТАРЬ СЕЙВ! 😔 Сейв вратаря: -🪙 ${bet}`); }
-});
-
-// 13. Баскетбол
-bot.hears(/^!?баскетбол(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("🏀 Использование: Баскетбол 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const hit = Math.random() < 0.5;
-  if (hit) { u.balance += bet; await ctx.reply(`🏀 ТОЧНО В КОРЗИНУ! 🎉 +🪙 ${bet}`); }
-  else { u.balance -= bet; await ctx.reply(`🏀 МИМО! 😔 -🪙 ${bet}`); }
-});
-
-// 14. Боулинг
-bot.hears(/^!?боулинг(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("🎳 Использование: Боулинг 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const pins = Math.floor(Math.random() * 10) + 1;
-  if (pins === 10) { u.balance += bet * 3; await ctx.reply(`🎳 СТРАЙК! Сбито 10 кеглей! 🔥 +🪙 ${bet * 3}`); }
-  else if (pins >= 5) { u.balance += Math.floor(bet * 1.2); await ctx.reply(`🎳 Сбито ${pins} кеглей! 🎉 +🪙 ${Math.floor(bet * 1.2)}`); }
-  else { u.balance -= bet; await ctx.reply(`🎳 Сбито всего ${pins} кеглей. 😔 -🪙 ${bet}`); }
-});
-
-// 15. Карта
-bot.hears(/^!?карта(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("🃏 Использование: Карта 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const uCard = Math.floor(Math.random() * 9) + 2;
-  const bCard = Math.floor(Math.random() * 9) + 2;
-  if (uCard > bCard) { u.balance += bet; await ctx.reply(`🃏 Ваша карта: ${uCard} | Карта бота: ${bCard}\n🎉 Вы выиграли +🪙 ${bet}`); }
-  else if (uCard < bCard) { u.balance -= bet; await ctx.reply(`🃏 Ваша карта: ${uCard} | Карта бота: ${bCard}\n😔 Бот выиграл -🪙 ${bet}`); }
-  else { await ctx.reply(`🃏 Ничья! (${uCard} : ${bCard}) Ставка возвращена.`); }
-});
-
-// 16. Шар
-bot.hears(/^!?шар(?:\s+(.+))?$/i, async (ctx) => {
-  const q = ctx.match[1];
-  if (!q) return ctx.reply("🔮 Задайте вопрос: Шар выигрываю ли я?");
-  const ans = ["Безусловно да", "Скорее всего да", "Знаки говорят - нет", "Даже не думай", "50 на 50", "Шансы хороши"];
-  const r = ans[Math.floor(Math.random() * ans.length)];
-  await ctx.reply(`🔮 **Магический Шар:** ${r}`);
-});
-
-// 17. Пример (Заработок)
-const activeMath = new Map();
-bot.hears(/^!?пример$/i, async (ctx) => {
-  const n1 = Math.floor(Math.random() * 50) + 10;
-  const n2 = Math.floor(Math.random() * 50) + 10;
-  const ans = n1 + n2;
-  activeMath.set(ctx.from.id, ans);
-  await ctx.reply(`🧮 Решите пример за монеты: **${n1} + ${n2} = ?**\n✍️ Напишите: **Ответ [число]**`);
-});
-
-bot.hears(/^!?ответ(?:\s+(-?\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const userAns = Number(ctx.match[1]);
-  const correctAns = activeMath.get(ctx.from.id);
-
-  if (correctAns === undefined) return ctx.reply("❌ Возьмите пример командой: Пример");
-  if (userAns === correctAns) {
-    activeMath.delete(ctx.from.id);
-    u.balance += 150;
-    await ctx.reply(`✅ Правильно! Вы получили 🪙 150 монет!`);
-  } else {
-    await ctx.reply(`❌ Неправильно, попробуйте ещё раз.`);
-  }
-});
-
-// 18. Удача
-bot.hears(/^!?удача(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("🍀 Использование: Удача 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  const chance = Math.random();
-  if (chance < 0.1) { u.balance += bet * 5; await ctx.reply(`🍀 СВЕРХУДАЧА! 5X! 🔥 +🪙 ${bet * 5}`); }
-  else if (chance < 0.4) { u.balance += bet * 2; await ctx.reply(`🍀 Удача улыбнулась! 🎉 +🪙 ${bet * 2}`); }
-  else { u.balance -= bet; await ctx.reply(`🍀 Удача повернулась спиной. 😔 -🪙 ${bet}`); }
-});
-
-// 19. Кейс
-bot.hears(/^!?кейс(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("🎁 Использование: Кейс 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
+  if (bet <= 0 || u.balance < bet) return ctx.reply("❌ Balans yetarsiz yoki stavka xato!");
 
   u.balance -= bet;
-  const mults = [0, 0.5, 1, 1.5, 2, 3];
-  const m = mults[Math.floor(Math.random() * mults.length)];
-  const win = Math.floor(bet * m);
-  u.balance += win;
-  await ctx.reply(`🎁 Вы открыли кейс!\nМножитель: x${m}\n🪙 Получено: ${win} монет`);
-});
-
-// 20. Риск
-bot.hears(/^!?риск(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (!bet || bet <= 0) return ctx.reply("💥 Использование: Риск 100");
-  if (u.balance < bet) return ctx.reply(`❌ Недостаточно монет.`);
-
-  if (Math.random() < 0.25) { u.balance += bet * 4; await ctx.reply(`💥 РИСК ОПРАВДАЛСЯ! 🔥 +🪙 ${bet * 4}`); }
-  else { u.balance -= bet; await ctx.reply(`💥 ВЗРЫВ! Все сгорело. 😔 -🪙 ${bet}`); }
-});
-
-// 🏦 БАНК
-bot.hears(/^!?банк(?:\s+(положить|снять|депозит|пополнить))?(?:\s+(\d+|все))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const action = ctx.match[1]?.toLowerCase();
-  const amountArg = ctx.match[2]?.toLowerCase();
-  const maxBankLimit = u.bankLimitUnlocked ? Infinity : 50000;
-
-  if (!action) {
-    return ctx.reply(`🏦 **БАНКОВСКИЙ СЧЁТ**\n\n🪙 Кошелёк: ${u.balance}\n🏦 В банке: ${u.bank} / ${u.bankLimitUnlocked ? "∞" : "50,000"}\n\n📥 Банк положить [сумма/все]\n📤 Банк снять [сумма/все]`);
+  const bombPos = Math.floor(Math.random() * 25);
+  
+  const buttons = [];
+  for (let i = 0; i < 25; i++) {
+    buttons.push(Markup.button.callback("❓", `mine_${i}_${bombPos}_${bet}`));
   }
-  if (action === "положить" || action === "депозит" || action === "пополнить") {
-    let amount = amountArg === "все" ? u.balance : Number(amountArg);
-    if (!amount || amount <= 0) return ctx.reply("📥 Укажите сумму: Банк положить 1000");
-    if (u.balance < amount) return ctx.reply(`❌ Недостаточно монет.`);
-    if (u.bank + amount > maxBankLimit) return ctx.reply(`❌ Превышен лимит банка.`);
+  const grid = [];
+  while (buttons.length) grid.push(buttons.splice(0, 5));
 
-    u.balance -= amount; u.bank += amount;
-    return ctx.reply(`✅ Положено 🪙 ${amount} в банк.`);
-  }
-  if (action === "снять") {
-    let amount = amountArg === "все" ? u.bank : Number(amountArg);
-    if (!amount || amount <= 0) return ctx.reply("📤 Укажите сумму: Банк снять 1000");
-    if (u.bank < amount) return ctx.reply(`❌ Недостаточно монет в банке.`);
-
-    u.bank -= amount; u.balance += amount;
-    return ctx.reply(`✅ Снято 🪙 ${amount} из банка.`);
-  }
+  await ctx.reply(`💣 **MINA (5x5)**\nStavka: ${bet} tanga\nMaydondagi 1 ta bombani topmasdan bosishga harakat qiling:`, Markup.inlineKeyboard(grid));
 });
 
-// 🛒 МАГАЗИН И ПОКУПКА
-bot.hears(/^!?(магазин|дўкон)[\.\s]*$/i, async (ctx) => {
+bot.action(/^mine_(\d+)_(\d+)_(\d+)$/, async (ctx) => {
+  const clicked = Number(ctx.match[1]);
+  const bomb = Number(ctx.match[2]);
+  const bet = Number(ctx.match[3]);
   const u = ecoUser(ctx);
-  await ctx.reply(
-    `🛒 **МАГАЗИН ТОВАРОВ И УСЛУГ**\n\n` +
-    `1. 👑 **VIP Статус** — 🪙 5000 монет\n` +
-    `2. 🏦 **Снять ограничения банка** — 🪙 3000 монет\n` +
-    `3. 🎨 **Кастомный титул** — 🪙 2000 монет\n\n` +
-    `💡 *Чтобы купить, используйте команду: Купить [номер]*\n` +
-    `💰 Ваш баланс: 🪙 ${u.balance}`
-  );
-});
 
-bot.hears(/^!?купить(?:\s+(\d+))?$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const itemNum = Number(ctx.match[1]);
-  if (!itemNum) return ctx.reply("🛒 Укажите номер товара: Купить 1");
-
-  if (itemNum === 1) {
-    if (u.vip) return ctx.reply("👑 У вас уже есть VIP статус!");
-    if (u.balance < 5000) return ctx.reply(`❌ Недостаточно монет. Баланс: 🪙 ${u.balance}`);
-    u.balance -= 5000; u.vip = true; 
-    return ctx.reply(`🎉 Вы успешно приобрели 👑 VIP Статус!`);
-  } else if (itemNum === 2) {
-    if (u.bankLimitUnlocked) return ctx.reply("🏦 Лимит банка уже снят!");
-    if (u.balance < 3000) return ctx.reply(`❌ Недостаточно монет. Баланс: 🪙 ${u.balance}`);
-    u.balance -= 3000; u.bankLimitUnlocked = true;
-    return ctx.reply(`🎉 Вы успешно сняли ограничения банка!`);
-  } else if (itemNum === 3) {
-    if (u.balance < 2000) return ctx.reply(`❌ Недостаточно монет. Баланс: 🪙 ${u.balance}`);
-    u.balance -= 2000; u.title = u.title || "Игрок";
-    return ctx.reply(`🎉 Вы приобрели Кастомный титул! Теперь установите его: Титул [ваш_текст]`);
+  if (clicked === bomb) {
+    await ctx.editMessageText(`💥 **BOMBA PORTLADI!**\nSiz ${bet} tanga boy berdingiz.`);
   } else {
-    return ctx.reply("❌ Товар с таким номером не найден.");
+    const win = Math.floor(bet * 1.8);
+    u.balance += win;
+    await ctx.editMessageText(`🎉 **G'ALABA!** Siz bombani chetlab o'tdingiz!\nYutug'ingiz: +${win} tanga!`);
   }
 });
 
-bot.hears(/^!?титул(?:\s+(.+))?$/i, async (ctx) => {
+// 2. PIRAMIDA O'YINI
+bot.hears(/^!(пирамида|piramida) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  const newTitle = ctx.match[1];
-  if (!u.title) return ctx.reply("❌ Купите титул в магазине (Купить 3).");
-  if (!newTitle) return ctx.reply("✍️ Использование: Титул [текст]");
-  u.title = newTitle.trim();
-  await ctx.reply(`✅ Ваш новый титул: **[${u.title}]**`);
+  const bet = Number(ctx.match[2]);
+  if (bet <= 0 || u.balance < bet) return ctx.reply("❌ Balans yetarsiz!");
+
+  u.balance -= bet;
+  const chance = Math.random() < 0.5;
+  if (chance) {
+    const win = Math.floor(bet * 2.5);
+    u.balance += win;
+    await ctx.reply(`🔺 **Piramidaga chiqdingiz!** 2.5x ko'paytirildi: +${win} tanga!`);
+  } else {
+    await ctx.reply(`💥 Piramida yiqildi! ${bet} tanga yo'qotdingiz.`);
+  }
 });
 
-// 💎 БОГАЧИ
-bot.hears(/^!?(богатые|богачи)[\.\s]*$/i, async (ctx) => {
-  ecoUser(ctx);
-  const sorted = Array.from(economyUsers.values()).map(u => ({ ...u, total: u.balance + u.bank })).sort((a, b) => b.total - a.total);
-  let text = "💎 **ТОП БОГАТЫХ УЧАСТНИКОВ**\n\n";
-  sorted.slice(0, 10).forEach((u, i) => {
-    text += `${i + 1}. ${ecoName(u)} — 🪙 ${u.total} (Кошелёк: ${u.balance} | Банк: ${u.bank})\n`;
-  });
-  await ctx.reply(text);
-});
-
-// 💸 ПЕРЕВОД
-bot.hears(/^!?(перевести|перевод)(?:\s+(\d+))?$/i, async (ctx) => {
-  const sender = ecoUser(ctx);
-  const amount = Number(ctx.match[2]);
-  const replyMsg = ctx.message.reply_to_message;
-  if (!replyMsg || !replyMsg.from || replyMsg.from.is_bot || replyMsg.from.id === ctx.from.id) return ctx.reply("💸 Ответьте человеку для перевода.");
-  if (!amount || amount <= 0 || sender.balance < amount) return ctx.reply("❌ Недостаточно монет.");
-
-  const receiver = ecoUser({ from: replyMsg.from });
-  sender.balance -= amount; receiver.balance += amount;
-  await ctx.reply(`✅ Переведено 🪙 ${amount} для ${ecoName(receiver)}`);
-});
-
-// 💼 РАБОТА И 🎁 БОНУС
-bot.hears(/^!?бонус$/iu, async (ctx) => {
+// 3. BOMBA O'YINI
+bot.hears(/^!(бомба|bomba) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  const now = Date.now();
-  if (now - u.lastBonus < ECO_BONUS_CD) return ctx.reply(`⏳ Бонус можно получать раз в 24 часа.`);
-  const bonusAmount = u.vip ? ECO_BONUS * 2 : ECO_BONUS;
-  u.balance += bonusAmount; u.lastBonus = now;
-  await ctx.reply(`🎁 БОНУС ПОЛУЧЕН! +🪙 ${bonusAmount}`);
+  const bet = Number(ctx.match[2]);
+  if (bet <= 0 || u.balance < bet) return ctx.reply("❌ Balans yetarsiz!");
+
+  u.balance -= bet;
+  const isSafe = Math.floor(Math.random() * 3) !== 0; // 3 dan 1 imkoniyat portlash
+  if (isSafe) {
+    const win = Math.floor(bet * 1.5);
+    u.balance += win;
+    await ctx.reply(`💣 Bomba miltilladi lekin portlamadi! +${win} tanga yutdingiz!`);
+  } else {
+    await ctx.reply(`💥 BOMBA PORTLADI! ${bet} tanga boy berildi.`);
+  }
 });
 
-bot.hears(/^!?работа$/iu, async (ctx) => {
-  const u = ecoUser(ctx);
-  const now = Date.now();
-  if (now - u.lastWork < ECO_WORK_CD) return ctx.reply(`⏳ Вы уже работали. Отдохните час!`);
-  const reward = Math.floor(Math.random() * 451) + 50;
-  u.balance += reward; u.lastWork = now;
-  await ctx.reply(`💼 Заработано: +🪙 ${reward}`);
-});
-
-// 👤 ПРОФИЛЬ И БАЛАНС
-bot.hears(/^!?баланс$/iu, async (ctx) => {
-  const u = ecoUser(ctx);
-  await ctx.reply(`💰 **ВАШ БАЛАНС**\n\n👤 ${ecoName(u)}\n🪙 Кошелёк: ${u.balance}\n🏦 Банк: ${u.bank}\n💎 Всего: ${u.balance + u.bank}`);
-});
-
-bot.hears(/^!?(профиль|profile)[\.\s]*$/iu, async (ctx) => {
-  const u = ecoUser(ctx);
+// BARCHA O'YINLAR RO'YXATI (21 TA)
+bot.hears(/^!?(игры|igri|o'yinlar)$/i, async (ctx) => {
   await ctx.reply(
-    `👤 **ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ**\n\n` +
-    `🆔 **ID:** \`${u.id}\`\n` +
-    `👤 **Имя:** ${ecoName(u)}\n` +
-    `🪙 **Кошелёк:** ${u.balance} монет\n` +
-    `🏦 **Банк:** ${u.bank} / ${u.bankLimitUnlocked ? "∞" : "50,000"}\n` +
-    `💎 **Всего:** ${u.balance + u.bank} монет\n` +
-    `👑 **VIP Статус:** ${u.vip ? "Активен" : "Нет"}`
+    `🎮 **21 TA MINI O'YINLAR RO'YXATI**\n\n` +
+    `1. \`Мина [bet]\` - Tugmali Mina (5x5)\n` +
+    `2. \`Пирамида [bet]\` - Piramida\n` +
+    `3. \`Бомба [bet]\` - Bomba o'yini\n` +
+    `4. \`Кость [bet]\` - Suyak (Dice)\n` +
+    `5. \`Дартс [bet]\` - Darts\n` +
+    `6. \`Баскетбол [bet]\` - Basketbol\n` +
+    `7. \`Футбол [bet]\` - Futbol\n` +
+    `8. \`Казино [bet]\` - Kazino\n` +
+    `9. \`Орел [bet]\` - Tanga tashlash (Orel)\n` +
+    `10. \`Решка [bet]\` - Tanga tashlash (Reshka)\n` +
+    `11. \`Рулетка [bet]\` - Ruletka\n` +
+    `12. \`Дуэль [bet]\` - Duel\n` +
+    `13. \`Угадай [1-5] [bet]\` - Sonni top\n` +
+    `14. \`Сейф [bet]\` - Seif buzish\n` +
+    `15. \`Сундук [bet]\` - Sandiq ochish\n` +
+    `16. \`Колесо [bet]\` - Omad g'ildiragi\n` +
+    `17. \`Лотерея [bet]\` - Lotereya\n` +
+    `18. \`Тир [bet]\` - Otish xonasi\n` +
+    `19. \`Скачки [bet]\` - Ot poygasi\n` +
+    `20. \`Крипто [bet]\` - Tezkor trading\n` +
+    `21. \`Блекджек [bet]\` - Blackjack\n\n` +
+    `💡 *Misol:* \`Мина 100\` yoki \`Бомба 500\``
   );
 });
 
-bot.hears(/^!?(старт|помощь|инфо)$/i, async (ctx) => { 
+// GENERAL & START
+bot.command("start", async (ctx) => {
+  const u = ecoUser(ctx);
   await ctx.reply(
-    `🔥 **8-A ADMIN BOT** 🔥\n\n` +
-    `📌 **Основные команды:**\n` +
-    `• \`Игры\` — список 20 игр\n` +
-    `• \`Профиль\` / \`Баланс\` — личный кабинет\n` +
-    `• \`Банк\` / \`Магазин\` / \`Богатые\` — экономика\n` +
-    `• \`Бонус\` / \`Работа\` — заработок монет\n` +
-    `• \`Топ\` / \`Статистика\` — активность в группе\n` +
-    `• \`Админы\` — список администрации\n` +
-    `• \`Мойид\` — узнать свой ID`
-  ); 
+    `👋 **Salom, ${u.name}!**\n\n` +
+    `🤖 8-A ADMIN & GAME BOT tayyor.\n\n` +
+    `📌 **Buyruqlar:**\n` +
+    `• \`Баланс\` — Balansni ko'rish\n` +
+    `• \`Бонус\` — Kunlik bonus\n` +
+    `• \`Работа\` — Ishlash\n` +
+    `• \`Трейдинг\` — Birja paneli\n` +
+    `• \`Игры\` — 21 ta o'yin ro'yxati`,
+    Markup.removeKeyboard()
+  );
 });
 
-bot.hears(/^!?мойид$/i, async (ctx) => { await ctx.reply(`🆔 Ваш ID: \`${ctx.from.id}\``); });
-bot.hears(/^!?правила$/i, async (ctx) => { await ctx.reply("📜 **ПРАВИЛА ГРУППЫ:**\n1. Без оскорблений.\n2. Без спама и рекламы."); });
+bot.hears(/^!?(баланс|balance)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  await ctx.reply(
+    `💰 **Sening Balansing:**\n` +
+    `👤 Foydalanuvchi: ${ecoName(u)}\n` +
+    `🪙 Tangalar: ${u.balance.toLocaleString()}\n` +
+    `📈 BTC Crypto: ${u.crypto} BTC`
+  );
+});
 
-bot.on("message", async (ctx, next) => {
+async function startBot() {
   try {
-    if (!ctx.from || ctx.from.is_bot || !isGroup(ctx)) return next();
-    const now = Date.now();
-    const limit = now - 24 * 60 * 60 * 1000;
-    const chatId = ctx.chat.id;
-    const userId = ctx.from.id;
+    await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+    await bot.launch();
+    console.log("🔥 Bot to'liq yangilandi va ishga tushdi!");
+  } catch (err) {
+    console.error("Bot xatosi:", err);
+  }
+}
 
-    if (!messageStats.has(chatId)) messageStats.set(chatId, new Map());
-    const chatStats = messageStats.get(chatId);
-
-    if (!chatStats.has(userId)) {
-      chatStats.set(userId, { times: [], username: ctx.from.username || null, name: ctx.from.first_name || "Пользователь" });
-    }
-
-    const user = chatStats.get(userId);
-    user.times.push(now);
-    user.times = user.times.filter((time) => time >= limit);
-    user.username = ctx.from.username || user.username;
-    user.name = ctx.from.first_name || user.name;
-  } catch (error) {}
-  return next();
-});
-
-bot.catch((error) => console.error("BOT ERROR:", error));
-bot.launch();
-console.log("🔥 Bot started!");
+startBot();
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
