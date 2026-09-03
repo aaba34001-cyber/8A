@@ -23,10 +23,6 @@ function ecoUser(ctx) {
       credit: 0,
       experience: 0,
       level: 1,
-      business: "Отсутствует",
-      bizIncome: 0,
-      car: "Отсутствует",
-      house: "Отсутствует",
       wins: 0,
       losses: 0
     });
@@ -34,22 +30,61 @@ function ecoUser(ctx) {
   return economyUsers.get(id);
 }
 
-function ecoName(u) {
-  if (u.nickname) return u.nickname;
-  return u.username ? `@${u.username}` : u.name;
+function addExp(u, amount) {
+  u.experience += amount;
+  if (u.experience >= u.level * 100) {
+    u.level += 1;
+    u.experience = 0;
+    u.balance += u.level * 50000;
+  }
 }
 
-// 🏆 ТОП БОГАТЫХ (срабатывает даже на частичное слово вроде "богат" или "топ")
-bot.hears(/(богат|топ|рейтинг)/i, async (ctx) => {
-  if (economyUsers.size === 0) return ctx.reply("📊 Список пока пуст!");
-  const usersArr = Array.from(economyUsers.values());
-  usersArr.sort((a, b) => (b.balance + b.bank) - (a.balance + a.bank));
+// Список всех доступных игр для проверки ставки
+const ALL_GAMES = [
+  "казино", "кубик", "рулетка", "слот", "21", "монета", "сейф", "карты",
+  "пуш", "пушка", "краш", "трейдинг", "мина", "пирамида", "башня", "бочки",
+  "дартс", "баскетбол", "футбол", "боулинг", "гонки", "кейс", "охота"
+];
 
-  let text = `🏆 **ТОП-10 САМЫХ БОГАТЫХ ИГРОКОВ**\n\n`;
-  usersArr.slice(0, 10).forEach((u, i) => {
-    text += `${i + 1}. **${ecoName(u)}** — **${(u.balance + u.bank).toLocaleString()} монет**\n`;
-  });
-  await ctx.reply(text, { parse_mode: "Markdown" });
+// Если игрок написал название игры без ставки
+bot.hears(new RegExp(`^(${ALL_GAMES.join("|")})$`, "i"), async (ctx) => {
+  const game = ctx.match[1].toLowerCase();
+  await ctx.reply(`❌ Вы не указали ставку!\n\n📌 Пример правильного использования:\n\`${game} 5000\``, { parse_mode: "Markdown" });
+});
+
+// Универсальный обработчик для всех игр со ставкой
+bot.hears(new RegExp(`^(${ALL_GAMES.join("|")})\\s+(\\d+)$`, "i"), async (ctx) => {
+  const u = ecoUser(ctx);
+  const gameName = ctx.match[1].toLowerCase();
+  const bet = Number(ctx.match[2]);
+
+  if (!bet || bet <= 0) {
+    return ctx.reply("❌ Укажите корректную ставку!");
+  }
+
+  if (u.balance < bet) {
+    return ctx.reply("❌ У вас недостаточно монет на балансе!");
+  }
+
+  u.balance -= bet;
+
+  let winRate = 0.38;
+  let mult = 2.0;
+
+  if (["сейф", "мина", "кейс"].includes(gameName)) { winRate = 0.22; mult = 4.5; }
+  else if (["слот", "краш", "пирамида"].includes(gameName)) { winRate = 0.30; mult = 3.0; }
+  else if (["пуш", "пушка"].includes(gameName)) { winRate = 0.40; mult = 2.1; }
+
+  if (Math.random() < winRate) {
+    const prize = Math.floor(bet * mult);
+    u.balance += prize;
+    u.wins++;
+    addExp(u, 15);
+    await ctx.reply(`🎮 **ИГРА: ${gameName.toUpperCase()}**\n\n🎉 **ПОБЕДА!**\n💰 Вы выиграли: **+${prize.toLocaleString()} монет**`);
+  } else {
+    u.losses++;
+    await ctx.reply(`🎮 **ИГРА: ${gameName.toUpperCase()}**\n\n📉 **ПРОИГРЫШ...**\n💸 Вы потеряли: **-${bet.toLocaleString()} монет**`);
+  }
 });
 
 async function startBot() {
