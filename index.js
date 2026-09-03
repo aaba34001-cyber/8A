@@ -1,5 +1,6 @@
 require("dotenv").config();
 const { Telegraf } = require("telegraf");
+const fs = require("fs");
 
 const token = process.env.BOT_TOKEN;
 if (!token) {
@@ -8,7 +9,32 @@ if (!token) {
 }
 
 const bot = new Telegraf(token);
-const economyUsers = new Map();
+const DB_FILE = "./database.json";
+
+// Ma'lumotlarni fayldan o'qish
+function loadDB() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const data = fs.readFileSync(DB_FILE, "utf8");
+      return new Map(JSON.parse(data));
+    }
+  } catch (e) {
+    console.error("DB o'qishda xatolik:", e);
+  }
+  return new Map();
+}
+
+// Ma'lumotlarni faylga saqlash
+function saveDB() {
+  try {
+    const data = JSON.stringify(Array.from(economyUsers.entries()));
+    fs.writeFileSync(DB_FILE, data, "utf8");
+  } catch (e) {
+    console.error("DB saqlashda xatolik:", e);
+  }
+}
+
+const economyUsers = loadDB();
 
 function ecoUser(ctx) {
   const id = String(ctx.from.id);
@@ -25,7 +51,6 @@ function ecoUser(ctx) {
       level: 1,
       business: "Отсутствует",
       bizIncome: 0,
-      lastBizCollect: 0,
       car: "Отсутствует",
       house: "Отсутствует",
       phone: "Отсутствует",
@@ -34,9 +59,9 @@ function ecoUser(ctx) {
       wins: 0,
       losses: 0,
       lastBonus: 0,
-      lastWork: 0,
-      lastCrime: 0
+      lastWork: 0
     });
+    saveDB();
   } else {
     const u = economyUsers.get(id);
     u.name = ctx.from.first_name || u.name;
@@ -57,10 +82,10 @@ function addExp(u, amount) {
     u.experience = 0;
     u.balance += u.level * 50000;
   }
+  saveDB();
 }
 
-// 📌 KATALOGLAR (TO'LIQ MAHSULOTLAR)
-const CARللCARS = [
+const CARS = [
   { name: "🚲 Велосипед", price: 5000 },
   { name: "🛵 Электроскутер", price: 20000 },
   { name: "🏎 Chevrolet Spark", price: 60000 },
@@ -124,7 +149,6 @@ const PLANES = [
   { name: "🚀 Личный Boeing 747", price: 200000000 }
 ];
 
-// 📌 ASOSIY MENYU VA BUYRUQLAR
 bot.hears(/^(меню|menu|start|старт)$/i, async (ctx) => {
   await ctx.reply(
     `🤖 **ГЛАВНОЕ МЕНЮ БОТА**\n\n` +
@@ -184,7 +208,6 @@ bot.hears(/^(богатые|топ|рейтинг|top)$/i, async (ctx) => {
   await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
-// 🎁 BONUS & WORK
 bot.hears(/^(бонус|bonus)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const now = Date.now();
@@ -195,6 +218,7 @@ bot.hears(/^(бонус|bonus)$/i, async (ctx) => {
   u.balance += reward;
   u.lastBonus = now;
   addExp(u, 30);
+  saveDB();
   await ctx.reply(`🎁 Вы получили ежедневный бонус: **+${reward.toLocaleString()} монет**!`);
 });
 
@@ -208,16 +232,17 @@ bot.hears(/^(работа|work)$/i, async (ctx) => {
   u.balance += earned;
   u.lastWork = now;
   addExp(u, 15);
+  saveDB();
   await ctx.reply(`💼 Вы сходили на работу и заработали **+${earned.toLocaleString()} монет**!`);
 });
 
-// 🏦 BANK
 bot.hears(/^банк\s+(\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const amount = Number(ctx.match[1]);
   if (u.balance < amount) return ctx.reply("❌ У вас нет столько наличных!");
   u.balance -= amount;
   u.bank += amount;
+  saveDB();
   await ctx.reply(`🏦 Вы положили в банк **${amount.toLocaleString()} монет**.`);
 });
 
@@ -227,10 +252,10 @@ bot.hears(/^снять\s+(\d+)$/i, async (ctx) => {
   if (u.bank < amount) return ctx.reply("❌ В банке нет такой суммы!");
   u.bank -= amount;
   u.balance += amount;
+  saveDB();
   await ctx.reply(`💵 Вы сняли со счета **${amount.toLocaleString()} монет**.`);
 });
 
-// 🛒 ULKAN MAGAZIN VA BIZNESLAR
 bot.hears(/^(маг|магазин|shop)$/i, async (ctx) => {
   let text = `🛒 **ПРЕМИУМ МАГАЗИН ИМУЩЕСТВА**\n\n`;
   text += `🚘 **Автомобили (\`купить авто [номер]\`):**\n`;
@@ -259,7 +284,6 @@ bot.hears(/^(бизнесы|бизнес|biz)$/i, async (ctx) => {
   await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
-// 🛍 SOTIB OLISH LOGIKASI
 bot.hears(/^купить авто (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const idx = Number(ctx.match[1]) - 1;
@@ -269,6 +293,7 @@ bot.hears(/^купить авто (\d+)$/i, async (ctx) => {
   u.balance -= item.price;
   u.car = item.name;
   addExp(u, 30);
+  saveDB();
   await ctx.reply(`🎉 Поздравляем! Вы успешно купили **${item.name}**!`);
 });
 
@@ -281,6 +306,7 @@ bot.hears(/^купить дом (\d+)$/i, async (ctx) => {
   u.balance -= item.price;
   u.house = item.name;
   addExp(u, 50);
+  saveDB();
   await ctx.reply(`🏡 Поздравляем! Ваша новая недвижимость: **${item.name}**!`);
 });
 
@@ -293,6 +319,7 @@ bot.hears(/^купить телефон (\d+)$/i, async (ctx) => {
   u.balance -= item.price;
   u.phone = item.name;
   addExp(u, 20);
+  saveDB();
   await ctx.reply(`📱 Вы купили новый телефон: **${item.name}**!`);
 });
 
@@ -306,6 +333,7 @@ bot.hears(/^купить бизнес (\d+)$/i, async (ctx) => {
   u.business = item.name;
   u.bizIncome = item.income;
   addExp(u, 100);
+  saveDB();
   await ctx.reply(`🏢 Вы стали владельцем бизнеса **${item.name}** (+${item.income.toLocaleString()}/час)!`);
 });
 
@@ -318,6 +346,7 @@ bot.hears(/^купить яхту (\d+)$/i, async (ctx) => {
   u.balance -= item.price;
   u.yacht = item.name;
   addExp(u, 70);
+  saveDB();
   await ctx.reply(`🛥 Вы приобрели роскошную яхту: **${item.name}**!`);
 });
 
@@ -330,10 +359,10 @@ bot.hears(/^купить самолет (\d+)$/i, async (ctx) => {
   u.balance -= item.price;
   u.plane = item.name;
   addExp(u, 150);
+  saveDB();
   await ctx.reply(`✈️ Вы купили личный самолет: **${item.name}**!`);
 });
 
-// 🎮 30+ O'YINLAR
 const ALL_GAMES = [
   "казино", "кубик", "рулетка", "слот", "21", "монета", "сейф", "карты",
   "пуш", "пушка", "краш", "трейдинг", "мина", "пирамида", "башня", "бочки",
@@ -381,9 +410,11 @@ bot.hears(new RegExp(`^(${ALL_GAMES.join("|")})\\s+(\\d+)$`, "i"), async (ctx) =
     u.balance += prize;
     u.wins++;
     addExp(u, 15);
+    saveDB();
     await ctx.reply(`🎮 **ИГРА: ${gameName.toUpperCase()}**\n\n🎉 **ПОБЕДА!**\n💰 Вы выиграли: **+${prize.toLocaleString()} монет**`);
   } else {
     u.losses++;
+    saveDB();
     await ctx.reply(`🎮 **ИГРА: ${gameName.toUpperCase()}**\n\n📉 **ПРОИГРЫШ...**\n💸 Вы потеряли: **-${bet.toLocaleString()} монет**`);
   }
 });
@@ -392,7 +423,7 @@ async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🚀 MEGA BOT ONLINE!");
+    console.log("🚀 MEGA BOT ONLINE WITH PERSISTENT DB!");
   } catch (err) {
     console.error("Ошибка:", err);
   }
