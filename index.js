@@ -13,14 +13,7 @@ const OWNER_ID = Number(process.env.OWNER_ID || 8480297110);
 const economyUsers = new Map();
 const activeMinesGames = new Map();
 const activePyramidGames = new Map();
-
-const VIP_LEVELS = {
-  1: { name: "VIP Bronze 🥉", price: 5000000, bonusMult: 1.1, workMult: 1.1 },
-  2: { name: "VIP Silver 🥈", price: 25000000, bonusMult: 1.25, workMult: 1.25 },
-  3: { name: "VIP Gold 🥇", price: 100000000, bonusMult: 1.5, workMult: 1.5 },
-  4: { name: "VIP Platinum 💎", price: 500000000, bonusMult: 2.0, workMult: 2.0 },
-  5: { name: "VIP DIAMOND 👑", price: 3000000000, bonusMult: 3.0, workMult: 3.0 }
-};
+const userWarns = new Map();
 
 function ecoUser(ctx) {
   const id = String(ctx.from.id);
@@ -33,8 +26,14 @@ function ecoUser(ctx) {
       bank: 0,
       vip: 0,
       business: "Отсутствует",
-      car: "Отсутствует"
+      car: "Отсутствует",
+      lastBonus: 0,
+      lastWork: 0
     });
+  } else {
+    const u = economyUsers.get(id);
+    u.name = ctx.from.first_name || u.name;
+    u.username = ctx.from.username || u.username;
   }
   return economyUsers.get(id);
 }
@@ -43,66 +42,27 @@ function ecoName(u) {
   return u.username ? `@${u.username}` : u.name;
 }
 
-// ==================== ADMIN & MODERATSIYA (KIK, BAN, RAZBAN) ====================
+// ==================== DONAT & VYVOD ====================
 
-bot.hears(/^(кик|kik|kick)$/i, async (ctx) => {
-  if (!ctx.message.reply_to_message) return ctx.reply("❌ Ответьте (reply) на сообщение пользователя, которого хотите кикнуть!");
-  try {
-    const target = ctx.message.reply_to_message.from;
-    await ctx.banChatMember(target.id);
-    await ctx.unbanChatMember(target.id);
-    await ctx.reply(`🚪 Пользователь **${target.first_name}** был кикнут из группы.`);
-  } catch (e) {
-    ctx.reply("❌ Ошибка при кике! Убедитесь, что бот является администратором.");
-  }
+bot.hears(/^(донат|donat)$/i, async (ctx) => {
+  await ctx.reply(
+    `💎 **ПОКУПКА МОНЕТ (ДОНАТ)**\n\n` +
+    `• **50 Telegram Stars** — 5,000,000 монет\n` +
+    `• **100 Telegram Stars** — 12,000,000 монет\n` +
+    `• **500 Telegram Stars** — 70,000,000 монет\n\n` +
+    `👨‍💻 Пополнение: @Man_adminn`
+  );
 });
 
-bot.hears(/^(бан|ban)$/i, async (ctx) => {
-  if (!ctx.message.reply_to_message) return ctx.reply("❌ Ответьте (reply) на сообщение пользователя, которого хотите забанить!");
-  try {
-    const target = ctx.message.reply_to_message.from;
-    await ctx.banChatMember(target.id);
-    await ctx.reply(`🚫 Пользователь **${target.first_name}** был забанен.`);
-  } catch (e) {
-    ctx.reply("❌ Ошибка при бане!");
-  }
-});
-
-bot.hears(/^(разбан|unban)$/i, async (ctx) => {
-  if (!ctx.message.reply_to_message) return ctx.reply("❌ Ответьте (reply) на сообщение пользователя для разбана!");
-  try {
-    const target = ctx.message.reply_to_message.from;
-    await ctx.unbanChatMember(target.id);
-    await ctx.reply(`✅ Пользователь **${target.first_name}** разбанен.`);
-  } catch (e) {
-    ctx.reply("❌ Ошибка при разбане!");
-  }
-});
-
-// ==================== CRASH (КРАШ) O'YINI ====================
-
-bot.hears(/^(краш|crash|krash) (\d+)$/i, async (ctx) => {
+bot.hears(/^(вывод|vyvod)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  const bet = Number(ctx.match[2]);
-
-  if (!bet || bet < 100) return ctx.reply("❌ Мин. ставка: 100!");
-  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
-
-  u.balance -= bet;
-
-  const isCrash = Math.random() < 0.45;
-  if (isCrash) {
-    const crashPoint = (Math.random() * 0.8 + 1.0).toFixed(2);
-    return ctx.reply(`📈 **CRASH GAME**\n\n💥 График график упал на **x${crashPoint}**!\n📉 Вы потеряли **-${bet.toLocaleString()} монет**.`);
-  } else {
-    const winMult = (Math.random() * 3.5 + 1.2).toFixed(2);
-    const winAmount = Math.floor(bet * winMult);
-    u.balance += winAmount;
-    return ctx.reply(`📈 **CRASH GAME**\n\n🚀 Ракета улетела до **x${winMult}**!\n🎉 Вы успели забрать **+${winAmount.toLocaleString()} монет**!`);
+  if (u.balance < 8000000) {
+    return ctx.reply(`❌ **НЕДОСТАТОЧНО МОНЕТ!**\nДля вывода **50 Stars** нужно **8,000,000 монет**.\n💰 Ваш баланс: **${u.balance.toLocaleString()}**.`);
   }
+  await ctx.reply("✅ Заявка отправлена администратору!");
 });
 
-// ==================== PIRAMIDA (2x2 FORMAT) ====================
+// ==================== PIRAMIDA 2x2 ====================
 
 bot.hears(/^(пирамида|pyramid|piramida) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
@@ -118,7 +78,7 @@ bot.hears(/^(пирамида|pyramid|piramida) (\d+)$/i, async (ctx) => {
     bet,
     level: 1,
     mults: [1.8, 3.2, 6.0, 12.0],
-    trap: Math.floor(Math.random() * 2) // 2 ta katakdan 1 tasi mina
+    trap: Math.floor(Math.random() * 2)
   });
 
   await renderPyramid2x2(ctx, userId);
@@ -128,19 +88,17 @@ async function renderPyramid2x2(ctx, userId) {
   const g = activePyramidGames.get(userId);
   if (!g) return;
 
-  const buttons = [
-    [
-      Markup.button.callback("❓ 1", "pyr2_0"),
-      Markup.button.callback("❓ 2", "pyr2_1")
-    ]
-  ];
+  const buttons = [[
+    Markup.button.callback("❓ 1", "pyr2_0"),
+    Markup.button.callback("❓ 2", "pyr2_1")
+  ]];
 
   const curWin = Math.floor(g.bet * (g.level === 1 ? 1 : g.mults[g.level - 2]));
   if (g.level > 1) {
     buttons.push([Markup.button.callback(`💰 Забрать (${curWin.toLocaleString()})`, "pyr2_take")]);
   }
 
-  const text = `🔺 **ПИРАМИДА 2x2 (Уровень ${g.level}/4)**\n\n🎯 Коэффициент: **x${g.mults[g.level - 1]}**\n💵 Текущий выигрыш: **${curWin.toLocaleString()} монет**\n\nВыберите 1 из 2 клеток:`;
+  const text = `🔺 **ПИРАМИДА 2x2 (Уровень ${g.level}/4)**\n\n🎯 Множитель: **x${g.mults[g.level - 1]}**\n💵 Выигрыш: **${curWin.toLocaleString()} монет**\n\nВыберите 1 из 2 клеток:`;
 
   if (ctx.callbackQuery) await ctx.editMessageText(text, Markup.inlineKeyboard(buttons));
   else await ctx.reply(text, Markup.inlineKeyboard(buttons));
@@ -155,14 +113,14 @@ bot.action(/^pyr2_(\d+)$/, async (ctx) => {
 
   if (choice === g.trap) {
     activePyramidGames.delete(userId);
-    return ctx.editMessageText(`💥 **ОШИБКА!** Вы выбрали мину и потеряли **${g.bet.toLocaleString()} монет**.`);
+    return ctx.editMessageText(`💥 **ОШИБКА!** Вы попали на ловушку и потеряли **${g.bet.toLocaleString()} монет**.`);
   }
 
   if (g.level >= 4) {
     const win = Math.floor(g.bet * g.mults[3]);
     ecoUser(ctx).balance += win;
     activePyramidGames.delete(userId);
-    return ctx.editMessageText(`🏆 **ПОБЕДА!** Вы прошли пирамиду 2x2 и выиграли **${win.toLocaleString()} монет**!`);
+    return ctx.editMessageText(`🏆 **ПОБЕДА!** Вы выиграли **${win.toLocaleString()} монет**!`);
   }
 
   g.level += 1;
@@ -181,47 +139,196 @@ bot.action("pyr2_take", async (ctx) => {
   await ctx.editMessageText(`🤑 **ВЫИГРЫШ ЗАБРАН!** Вы выиграли **${win.toLocaleString()} монет**!`);
 });
 
-// ==================== BOGATIE / TOP / MENU / START ====================
+// ==================== CRASH (REAL DANGER: HAM + HAM -) ====================
 
-bot.hears(/^(богатые|богачи|топ|top|boylar)$/i, async (ctx) => {
+bot.hears(/^(краш|crash|krash) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[2]);
+
+  if (!bet || bet < 100) return ctx.reply("❌ Мин. ставка: 100!");
+  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
+
+  u.balance -= bet;
+
+  const isCrash = Math.random() < 0.50; // 50% chance crash
+  if (isCrash) {
+    const crashPoint = (Math.random() * 0.9 + 1.0).toFixed(2);
+    return ctx.reply(`📈 **CRASH GAME**\n\n💥 График рухнул на **x${crashPoint}**!\n📉 Вы потеряли **-${bet.toLocaleString()} монет**.`);
+  } else {
+    const winMult = (Math.random() * 2.5 + 1.2).toFixed(2);
+    const winAmount = Math.floor(bet * winMult);
+    u.balance += winAmount;
+    return ctx.reply(`📈 **CRASH GAME**\n\n🚀 Ракета взлетела до **x${winMult}**!\n🎉 Вы зафиксировали **+${winAmount.toLocaleString()} монет**!`);
+  }
+});
+
+// ==================== TRADING (HAM + HAM -) ====================
+
+bot.hears(/^(трейдинг|trade) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[2]);
+
+  if (!bet || bet < 100) return ctx.reply("❌ Мин. ставка: 100!");
+  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
+
+  u.balance -= bet;
+
+  const isWin = Math.random() < 0.45; // 45% win chance
+  if (isWin) {
+    const mult = (Math.random() * 1.5 + 1.2).toFixed(2);
+    const winAmount = Math.floor(bet * mult);
+    u.balance += winAmount;
+    return ctx.reply(`📊 **ТРЕЙДИНГ**\n\n🟢 Курс пошел вверх! Сделка закрыта в плюс (x${mult}).\n🎉 Вы вывели **+${winAmount.toLocaleString()} монет**!`);
+  } else {
+    return ctx.reply(`📊 **ТРЕЙДИНГ**\n\n🔴 Сработал Stop-Loss! Курс резко упал.\n📉 Потеря: **-${bet.toLocaleString()} монет**.`);
+  }
+});
+
+// ==================== MINES 7x7 ====================
+
+bot.hears(/^(мина|мины|mina|mines) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[2]);
+
+  if (!bet || bet < 500) return ctx.reply("❌ Мин. ставка: 500!");
+  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
+
+  u.balance -= bet;
+  const userId = ctx.from.id;
+
+  const mines = new Set();
+  while (mines.size < 8) mines.add(Math.floor(Math.random() * 49));
+
+  activeMinesGames.set(userId, { bet, mines, revealed: new Set(), mult: 1.0 });
+  await renderMinesGrid(ctx, userId, "💣 **МИННОЕ ПОЛЕ (7x7)**");
+});
+
+async function renderMinesGrid(ctx, userId, title) {
+  const g = activeMinesGames.get(userId);
+  if (!g) return;
+
+  const buttons = [];
+  for (let r = 0; r < 7; r++) {
+    const row = [];
+    for (let c = 0; c < 7; c++) {
+      const idx = r * 7 + c;
+      if (g.revealed.has(idx)) row.push(Markup.button.callback("💎", "mines_ignore"));
+      else row.push(Markup.button.callback("🟦", `mine_step_${idx}`));
+    }
+    buttons.push(row);
+  }
+
+  const curWin = Math.floor(g.bet * g.mult);
+  buttons.push([Markup.button.callback(`💰 Забрать (${curWin.toLocaleString()})`, "mines_take")]);
+
+  const text = `${title}\n\n📊 Множитель: **x${g.mult.toFixed(2)}**\n💵 Выигрыш: **${curWin.toLocaleString()} монет**`;
+
+  if (ctx.callbackQuery) await ctx.editMessageText(text, Markup.inlineKeyboard(buttons));
+  else await ctx.reply(text, Markup.inlineKeyboard(buttons));
+}
+
+bot.action(/^mine_step_(\d+)$/, async (ctx) => {
+  const userId = ctx.from.id;
+  const g = activeMinesGames.get(userId);
+  if (!g) return ctx.answerCbQuery("❌ Игра завершена!", { show_alert: true });
+
+  const idx = Number(ctx.match[1]);
+
+  if (g.mines.has(idx)) {
+    activeMinesGames.delete(userId);
+    return ctx.editMessageText(`💥 **БОМБА ВЗОРВАЛАСЬ!** Вы потеряли **${g.bet.toLocaleString()} монет**.`);
+  }
+
+  g.revealed.add(idx);
+  g.mult += 0.25;
+  await renderMinesGrid(ctx, userId, "💣 **МИННОЕ ПОЛЕ (7x7)**");
+});
+
+bot.action("mines_take", async (ctx) => {
+  const userId = ctx.from.id;
+  const g = activeMinesGames.get(userId);
+  if (!g) return ctx.answerCbQuery("❌ Игра завершена!", { show_alert: true });
+
+  const win = Math.floor(g.bet * g.mult);
+  ecoUser(ctx).balance += win;
+  activeMinesGames.delete(userId);
+  await ctx.editMessageText(`🤑 **ВЫИГРЫШ ЗАБРАН!** Вы выиграли **${win.toLocaleString()} монет**!`);
+});
+
+bot.action("mines_ignore", (ctx) => ctx.answerCbQuery());
+
+// ==================== ALL STANDARD GAMES ====================
+
+function playStandardGame(ctx, bet, winRate, winMult, title) {
+  const u = ecoUser(ctx);
+  if (!bet || bet <= 0 || u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
+
+  u.balance -= bet;
+  if (Math.random() < winRate) {
+    const prize = Math.floor(bet * winMult);
+    u.balance += prize;
+    return ctx.reply(`${title}\n🎉 **ПОБЕДА!** Вы выиграли **+${prize.toLocaleString()} монет**!`);
+  } else {
+    return ctx.reply(`${title}\n📉 **ПРОИГРЫШ!** Вы потеряли **-${bet.toLocaleString()} монет**.`);
+  }
+}
+
+bot.hears(/^(казино|casino) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎰 **КАЗИНО**"));
+bot.hears(/^(кубик|dice) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎲 **КУБИК**"));
+bot.hears(/^(слоты|slots) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.25, 3.5, "🎰 **СЛОТЫ**"));
+bot.hears(/^(монетка|flip) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.40, 1.9, "🪙 **МОНЕТКА**"));
+bot.hears(/^(рулетка) (красное|черное) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[3]), 0.40, 1.95, "🎡 **РУЛЕТКА**"));
+bot.hears(/^(дартс|darts) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.2, "🎯 **ДАРТС**"));
+bot.hears(/^(баскетбол|basket) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.2, "🏀 **БАСКЕТБОЛ**"));
+bot.hears(/^(футбол|football) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "⚽ **ФУТБОЛ**"));
+bot.hears(/^(покер|poker) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.5, "🃏 **ПОКЕР**"));
+bot.hears(/^(блекджек|bj) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🂡 **БЛЕКДЖЕК**"));
+bot.hears(/^(сейф|safe) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.20, 5.0, "🔐 **СЕЙФ**"));
+bot.hears(/^(колесо|wheel) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.5, "🎡 **КОЛЕСО УДАЧИ**"));
+bot.hears(/^(дуэль|duel) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.40, 1.9, "⚔️ **ДУЭЛЬ**"));
+bot.hears(/^(скачки|race) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.25, 3.0, "🐎 **СКАЧКИ**"));
+
+// ==================== MENU & COMMANDS ====================
+
+bot.hears(/^(богатые|топ|top)$/i, async (ctx) => {
   if (economyUsers.size === 0) return ctx.reply("📊 Список пока пуст!");
-
   const usersArr = Array.from(economyUsers.values());
   usersArr.sort((a, b) => (b.balance + b.bank) - (a.balance + a.bank));
 
-  const top10 = usersArr.slice(0, 10);
-  let text = `🏆 **ТОП-10 САМЫХ БОГАТЫХ ИГРОКОВ**\n\n`;
-  const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
-
-  top10.forEach((u, index) => {
-    const total = u.balance + u.bank;
-    text += `${medals[index]} **${ecoName(u)}** — **${total.toLocaleString()} монет**\n`;
+  let text = `🏆 **ТОП-10 ИГРОКОВ**\n\n`;
+  usersArr.slice(0, 10).forEach((u, i) => {
+    text += `${i + 1}. **${ecoName(u)}** — **${(u.balance + u.bank).toLocaleString()} монет**\n`;
   });
-
   await ctx.reply(text);
 });
 
-bot.hears(/^(игры|games|правила|qoidalar|menu|o'yinlar|меню)$/i, async (ctx) => {
-  await ctx.reply(
-    `📜 **СПИСОК ИГР И ИНСТРУКЦИЯ**\n\n` +
-    `🚀 **Краш:** \`краш [ставка]\` — игра на множитель ракетой.\n` +
-    `🔺 **Пирамида (2x2):** \`пирамида [ставка]\` — выбор 1 из 2 клеток.\n` +
-    `💣 **Мины (7x7):** \`мина [ставка]\` — поле с бомбами.\n` +
-    `🎰 **Классика:** \`казино\`, \`слоты\`, \`кубик\`, \`монетка\`, \`трейдинг\`.\n\n` +
-    `🛡️ **Админ Команды:** \`кик\`, \`бан\`, \`разбан\` (в ответ на сообщение)\n` +
-    `💼 **Прочее:** \`баланс\`, \`профиль\`, \`богатые\`, \`донат\`, \`вывод\``
-  );
+bot.hears(/^(баланс|balans)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  await ctx.reply(`💰 **БАЛАНС:** На руках: **${u.balance.toLocaleString()}** | В банке: **${u.bank.toLocaleString()}**`);
 });
 
-bot.command("start", async (ctx) => {
-  await ctx.reply("🔥 Бот онлайн! Введите `игры` или `меню`.");
+bot.hears(/^(профиль|проф)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  await ctx.reply(`👤 **ПРОФИЛЬ:** **${ecoName(u)}** | ID: \`${u.id}\` | VIP: **${u.vip}**`);
+});
+
+bot.hears(/^(игры|меню|menu|start|старт)$/i, async (ctx) => {
+  await ctx.reply(
+    `📜 **СПИСОК ИГР И КОМАНД**\n\n` +
+    `🚀 **Краш:** \`краш [ставка]\` — есть риск проигрыша!\n` +
+    `📊 **Трейдинг:** \`трейдинг [ставка]\` — риск и профит!\n` +
+    `🔺 **Пирамида (2x2):** \`пирамида [ставка]\`\n` +
+    `💣 **Мины (7x7):** \`мина [ставка]\`\n` +
+    `🎲 **Мини-Игры:** \`казино\`, \`слоты\`, \`покер\`, \`блекджек\`, \`сейф\`, \`колесо\`, \`дуэль\`...\n\n` +
+    `💎 **Финансы:** \`донат\`, \`вывод\`, \`баланс\`, \`профиль\`, \`богатые\``
+  );
 });
 
 async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🚀 BOT HAS STARTED!");
+    console.log("🚀 BOT IS LIVE WITH BALANCED GAMES!");
   } catch (err) {
     console.error("Start Error:", err);
   }
@@ -229,5 +336,5 @@ async function startBot() {
 
 startBot();
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
+process.process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
