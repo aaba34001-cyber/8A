@@ -23,10 +23,6 @@ function ecoUser(ctx) {
       credit: 0,
       experience: 0,
       level: 1,
-      business: "Отсутствует",
-      bizIncome: 0,
-      car: "Отсутствует",
-      house: "Отсутствует",
       wins: 0,
       losses: 0
     });
@@ -48,105 +44,103 @@ function addExp(u, amount) {
   }
 }
 
-bot.hears(/^(игры|igri|игры 🎮|oyinlar|o'yinlar|21)$/i, async (ctx) => {
+// 1. O'YINLAR MENYUSI (Har qanday variantda ishlaydi)
+bot.hears(/^(игры|igri|игры 🎮|oyinlar|o'yinlar|o`yinlar|21)$/i, async (ctx) => {
   const gamesText = `
-🎮 **ДОСТУПНЫЕ ИГРЫ (21 ШТ.)**
+🎮 **MAVJUD O'YINLAR VA KAZINO (21 TA)**
 
-🎲 **Удача и Казино:**
-1. \`казино [ставка]\` — Умножьте свою ставку
-2. \`кубик [1-6] [ставка]\` — Бросок костей
-3. \`рулетка [красное/черное] [ставка]\` — Испытайте удачу
-4. \`слот [ставка]\` — Игровой автомат
-5. \`21 [ставка]\` — Очко / Блэкджек
-6. \`монета [орел/решка] [ставка]\` — Подбросить монетку
-7. \`сейф [1-10] [ставка]\` — Угадать код от сейфа
+🎲 **Omad va Kazino:**
+1. \`kazino [stavka]\` — Klassik kazino (2x)
+2. \`kubik [stavka]\` — Zarlar o'yini
+3. \`ruletka [stavka]\` — Ruletka
+4. \`slot [stavka]\` — Slot avtomat
+5. \`21 [stavka]\` — 21 ochko (Blackjack)
+6. \`moneta [stavka]\` — Tanga tashash
+7. \`seif [stavka]\` — Seif ochish
 
-💥 **Азартные мини-игры:**
-8. \`пуш [ставка]\` — Нажимайте Пуш и поднимайте икс
-9. \`пушка [ставка]\` — Выстрел из пушки на коэффициент
-10. \`пирамида [ставка]\` — Подъем по пирамиде
-11. \`мина [ставка]\` — Минное поле (7x7)
-12. \`математика\` — Решите пример на время
-13. \`викторина\` — Ответьте на вопрос
+💥 **Mini O'yinlar:**
+8. \`push [stavka]\` — Push o'yini
+9. \`pushka [stavka]\` — Pushka otish
+10. \`piramida [stavka]\` — Piramida
+11. \`mina [stavka]\` — Mina maydoni
+12. \`matematika\` — Tezkor misol
+13. \`viktorina\` — Savol-javob
 
-🎯 **Спорт и Точность:**
-14. \`дартс [ставка]\` — Бросок в мишень
-15. \`баскетбол [ставка]\` — Бросок в корзину
-16. \`футбол [ставка]\` — Забить пенальти
-17. \`боулинг [ставка]\` — Сбить кегли
+🎯 **Sport va Boshqalar:**
+14. \`darts [stavka]\` — Darts
+15. \`basketbol [stavka]\` — Basketbol
+16. \`футбол [stavka]\` — Futbol penalti
+17. \`боулинг [stavka]\` — Bowling
+18. \`duel [stavka]\` — Duel
+19. \`jang [stavka]\` — Jang
+20. \`poyga [stavka]\` — Poyga
+21. \`lotereya\` — Lotereya
 
-⚔️ **PvP / Дуэли:**
-18. \`дуэль [@username] [ставка]\` — Вызов игрока
-19. \`бой [ставка]\` — Битва с случайным игроком
-20. \`гонки [ставка]\` — Автомобильные гонки
-21. \`лотерея\` — Ежедневный билет удачи
-
-📌 *Чтобы начать, отправьте нужную команду в чат!*
+📌 *Masalan ishlatish:* \`kazino 5000\` yoki \`push 1000\`
 `;
 
   await ctx.reply(gamesText, { parse_mode: "Markdown" });
 });
 
-// PUSH O'YINI (push [stavka])
-bot.hears(/^(пуш|push) (\d+)$/i, async (ctx) => {
+// 2. UNIVERSAL O'YINLAR HANDLERI (Barcha o'yinlarni bir joyda muammosiz ushlaydi)
+bot.hears(/^(kazino|казино|kubik|кубик|ruletka|рулетка|slot|слоты|slot-avtomat|21|bлекджек|moneta|монета|seif|сейф|push|пуш|pushka|пушка|piramida|пирамида|mina|мина|darts|дартс|basketbol|баскетбол|futbol|футбол|bowling|боулинг)\s+(\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
+  const gameName = ctx.match[1].toLowerCase();
   const bet = Number(ctx.match[2]);
 
-  if (!bet || bet <= 0 || u.balance < bet) {
-    return ctx.reply("❌ Balansingizda yetarli mablag' yo'q yoki noto'g'ri stavka kiritdingiz!");
+  if (!bet || bet <= 0) {
+    return ctx.reply("❌ Stavka miqdorini to'g'ri kiriting! Masalan: `kazino 5000`", { parse_mode: "Markdown" });
+  }
+
+  if (u.balance < bet) {
+    return ctx.reply("❌ Balansingizda yetarli mablag' yo'q!");
   }
 
   u.balance -= bet;
 
-  await ctx.reply(
-    `🔴 **PUSH O'YINI**\n\nStavka: **${bet.toLocaleString()} tanga**\nOmadni sinash uchun pastdagi tugmani bosing!`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback(`🚀 Push qilish (${bet * 2}x)`, `do_push_${bet}`)],
-      [Markup.button.callback(`❌ Bekor qilish`, `cancel_push`)]
-    ])
-  );
-});
+  // O'yin ehtimolligi va koeffitsiyenti
+  let winRate = 0.38;
+  let mult = 2.0;
 
-bot.action(/^do_push_(\d+)$/, async (ctx) => {
-  try {
-    const bet = Number(ctx.match[1]);
-    const u = ecoUser(ctx);
+  if (["seif", "сейф"].includes(gameName)) { winRate = 0.20; mult = 5.0; }
+  else if (["slot", "слоты"].includes(gameName)) { winRate = 0.28; mult = 3.0; }
+  else if (["push", "пуш"].includes(gameName)) { winRate = 0.40; mult = 2.1; }
 
-    if (Math.random() < 0.40) {
-      const prize = Math.floor(bet * 2.0);
-      u.balance += prize;
-      u.wins++;
-      await ctx.editMessageText(
-        `🔴 **PUSH O'YINI**\n\n🎉 **TABRIKLEYSIZ! YUTDINGIZ!**\n💰 Mukofot: **+${prize.toLocaleString()} tanga**`
-      );
-    } else {
-      u.losses++;
-      await ctx.editMessageText(
-        `🔴 **PUSH O'YINI**\n\n📉 **Afsuski, yutqazdingiz...**\n💸 Yo'qotish: **-${bet.toLocaleString()} tanga**`
-      );
-    }
-  } catch (err) {
-    await ctx.answerCbQuery("Xatolik yuz berdi!");
+  if (Math.random() < winRate) {
+    const prize = Math.floor(bet * mult);
+    u.balance += prize;
+    u.wins++;
+    addExp(u, 15);
+    return ctx.reply(`🎮 **O'YIN: ${gameName.toUpperCase()}**\n\n🎉 **TABRIKLEYSIZ, YUTDINGIZ!**\n💰 Mukofot: **+${prize.toLocaleString()} tanga**`);
+  } else {
+    u.losses++;
+    return ctx.reply(`🎮 **O'YIN: ${gameName.toUpperCase()}**\n\n📉 **Afsuski, yutqazdingiz...**\n💸 Yo'qotish: **-${bet.toLocaleString()} tanga**`);
   }
 });
 
-bot.action('cancel_push', async (ctx) => {
-  try {
-    await ctx.editMessageText("❌ O'yin bekor qilindi.");
-  } catch (err) {}
+// Profil komandasi
+bot.hears(/^(профиль|profil|profill)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  await ctx.reply(
+    `👤 **SIZNING PROFILINGIZ:**\n\n` +
+    `🏷 Ism: **${ecoName(u)}**\n` +
+    `🆔 ID: \`${u.id}\`\n` +
+    `⭐ Daraja: **${u.level} LVL** (${u.experience}/${u.level * 100} EXP)\n` +
+    `💰 Balans: **${u.balance.toLocaleString()} tanga**\n` +
+    `🏆 G'alabalar / Mag'lubiyatlar: ${u.wins} / ${u.losses}`
+  );
 });
 
 async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🚀 BOT ONLINE!");
+    console.log("🚀 BOT ISHGA TUSHDI VA O'YINLAR SOZLandi!");
   } catch (err) {
-    console.error("Start Error:", err);
+    console.error("Xatolik:", err);
   }
 }
 
 startBot();
-
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
