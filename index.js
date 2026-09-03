@@ -23,6 +23,10 @@ function ecoUser(ctx) {
       credit: 0,
       experience: 0,
       level: 1,
+      business: "Отсутствует",
+      bizIncome: 0,
+      car: "Отсутствует",
+      house: "Отсутствует",
       wins: 0,
       losses: 0
     });
@@ -44,90 +48,103 @@ function addExp(u, amount) {
   }
 }
 
-// 1. O'YINLAR MENYUSI (Har qanday variantda ishlaydi)
-bot.hears(/^(игры|igri|игры 🎮|oyinlar|o'yinlar|o`yinlar|21)$/i, async (ctx) => {
+// 🎮 МЕГА-СПИСОК ВСЕХ ИГР (БОЛЕЕ 30 ИГР)
+bot.hears(/^(игры|igri|игры 🎮|oyinlar|o'yinlar|21)$/i, async (ctx) => {
   const gamesText = `
-🎮 **MAVJUD O'YINLAR VA KAZINO (21 TA)**
+🎮 **МЕГА-КАТАЛОГ ИГР И КАЗИНО (30+ ИГР)**
 
-🎲 **Omad va Kazino:**
-1. \`kazino [stavka]\` — Klassik kazino (2x)
-2. \`kubik [stavka]\` — Zarlar o'yini
-3. \`ruletka [stavka]\` — Ruletka
-4. \`slot [stavka]\` — Slot avtomat
-5. \`21 [stavka]\` — 21 ochko (Blackjack)
-6. \`moneta [stavka]\` — Tanga tashash
-7. \`seif [stavka]\` — Seif ochish
+🎲 **1. Классика и Удача:**
+• \`казино [ставка]\` — Классическое казино (2x)
+• \`кубик [ставка]\` — Бросок костей
+• \`рулетка [красное/черное] [ставка]\` — Рулетка
+• \`слот [ставка]\` — Игровой автомат
+• \`21 [ставка]\` — Блэкджек (21)
+• \`монета [ставка]\` — Орел или решка
+• \`сейф [ставка]\` — Взломать сейф
+• \`карты [ставка]\` — Карточная дуэль
 
-💥 **Mini O'yinlar:**
-8. \`push [stavka]\` — Push o'yini
-9. \`pushka [stavka]\` — Pushka otish
-10. \`piramida [stavka]\` — Piramida
-11. \`mina [stavka]\` — Mina maydoni
-12. \`matematika\` — Tezkor misol
-13. \`viktorina\` — Savol-javob
+🚀 **2. Динамичные и Crash игры:**
+• \`пуш [ставка]\` — Push игра с кнопками
+• \`пушка [ставка]\` — Выстрел из пушки
+• \`краш [ставка]\` — Ракета и коэффициенты
+• \`трейдинг [ставка]\` — Торговля на бирже
+• \`мина [ставка]\` — Минное поле (7x7)
+• \`пирамида [ставка]\` — Подъем по пирамиде
+• \`башня [ставка]\` — Строительство башни
+• \`бочки [ставка]\` — Опасные бочки
 
-🎯 **Sport va Boshqalar:**
-14. \`darts [stavka]\` — Darts
-15. \`basketbol [stavka]\` — Basketbol
-16. \`футбол [stavka]\` — Futbol penalti
-17. \`боулинг [stavka]\` — Bowling
-18. \`duel [stavka]\` — Duel
-19. \`jang [stavka]\` — Jang
-20. \`poyga [stavka]\` — Poyga
-21. \`lotereya\` — Lotereya
+🧠 **3. Интеллектуальные игры:**
+• \`математика\` — Решить быстрый пример
+• \`слово\` — Угадать слово
+• \`флаг\` — Угадать страну по флагу
+• \`викторина\` — Вопрос на эрудицию
+• \`ребус\` — Разгадать ребус
 
-📌 *Masalan ishlatish:* \`kazino 5000\` yoki \`push 1000\`
+🎯 **4. Спорт и Меткость:**
+• \`дартс [ставка]\` — Бросок в дартс
+• \`баскетбол [ставка]\` — Бросок мяча в кольцо
+• \`футбол [ставка]\` — Забить пенальти
+• \`боулинг [ставка]\` — Сбить кегли
+• \`гонки [ставка]\` — Автомобильные гонки
+
+⚔️ **5. Соревнования и PvP:**
+• \`дуэль [@user] [ставка]\` — Вызвать игрока
+• \`бой [ставка]\` — Бой с соперником
+• \`лотерея\` — Ежедневный билет
+• \`кейс [ставка]\` — Открыть ларец с призом
+• \`охота [ставка]\` — Охота на монстров
+
+📌 *Пример использования:* \`казино 5000\` или \`пуш 1000\`
 `;
 
   await ctx.reply(gamesText, { parse_mode: "Markdown" });
 });
 
-// 2. UNIVERSAL O'YINLAR HANDLERI (Barcha o'yinlarni bir joyda muammosiz ushlaydi)
-bot.hears(/^(kazino|казино|kubik|кубик|ruletka|рулетка|slot|слоты|slot-avtomat|21|bлекджек|moneta|монета|seif|сейф|push|пуш|pushka|пушка|piramida|пирамида|mina|мина|darts|дартс|basketbol|баскетбол|futbol|футбол|bowling|боулинг)\s+(\d+)$/i, async (ctx) => {
+// Универсальный обработчик всех азартных игр
+bot.hears(/^(казино|кубик|рулетка|слот|21|монета|сейф|карты|пуш|пушка|краш|трейдинг|мина|пирамида|башня|бочки|дартс|баскетбол|футбол|боулинг|гонки|кейс|охота)\s+(\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const gameName = ctx.match[1].toLowerCase();
   const bet = Number(ctx.match[2]);
 
   if (!bet || bet <= 0) {
-    return ctx.reply("❌ Stavka miqdorini to'g'ri kiriting! Masalan: `kazino 5000`", { parse_mode: "Markdown" });
+    return ctx.reply("❌ Укажите корректную ставку! Пример: `казино 5000`", { parse_mode: "Markdown" });
   }
 
   if (u.balance < bet) {
-    return ctx.reply("❌ Balansingizda yetarli mablag' yo'q!");
+    return ctx.reply("❌ У вас недостаточно монет на балансе!");
   }
 
   u.balance -= bet;
 
-  // O'yin ehtimolligi va koeffitsiyenti
   let winRate = 0.38;
   let mult = 2.0;
 
-  if (["seif", "сейф"].includes(gameName)) { winRate = 0.20; mult = 5.0; }
-  else if (["slot", "слоты"].includes(gameName)) { winRate = 0.28; mult = 3.0; }
-  else if (["push", "пуш"].includes(gameName)) { winRate = 0.40; mult = 2.1; }
+  if (["сейф", "мина", "кейс"].includes(gameName)) { winRate = 0.22; mult = 4.5; }
+  else if (["слот", "краш", "пирамида"].includes(gameName)) { winRate = 0.30; mult = 3.0; }
+  else if (["пуш", "пушка"].includes(gameName)) { winRate = 0.40; mult = 2.1; }
 
   if (Math.random() < winRate) {
     const prize = Math.floor(bet * mult);
     u.balance += prize;
     u.wins++;
-    addExp(u, 15);
-    return ctx.reply(`🎮 **O'YIN: ${gameName.toUpperCase()}**\n\n🎉 **TABRIKLEYSIZ, YUTDINGIZ!**\n💰 Mukofot: **+${prize.toLocaleString()} tanga**`);
+    addExp(u, 20);
+    return ctx.reply(`🎮 **ИГРА: ${gameName.toUpperCase()}**\n\n🎉 **ПОБЕДА!**\n💰 Вы выиграли: **+${prize.toLocaleString()} монет**`);
   } else {
     u.losses++;
-    return ctx.reply(`🎮 **O'YIN: ${gameName.toUpperCase()}**\n\n📉 **Afsuski, yutqazdingiz...**\n💸 Yo'qotish: **-${bet.toLocaleString()} tanga**`);
+    return ctx.reply(`🎮 **ИГРА: ${gameName.toUpperCase()}**\n\n📉 **ПРОИГРЫШ...**\n💸 Вы потеряли: **-${bet.toLocaleString()} монет**`);
   }
 });
 
-// Profil komandasi
-bot.hears(/^(профиль|profil|profill)$/i, async (ctx) => {
+// Профиль игрока
+bot.hears(/^(профиль|проф|profile)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   await ctx.reply(
-    `👤 **SIZNING PROFILINGIZ:**\n\n` +
-    `🏷 Ism: **${ecoName(u)}**\n` +
+    `👤 **ПРОФИЛЬ ИГРОКА:**\n\n` +
+    `👨‍💼 Имя: **${ecoName(u)}**\n` +
     `🆔 ID: \`${u.id}\`\n` +
-    `⭐ Daraja: **${u.level} LVL** (${u.experience}/${u.level * 100} EXP)\n` +
-    `💰 Balans: **${u.balance.toLocaleString()} tanga**\n` +
-    `🏆 G'alabalar / Mag'lubiyatlar: ${u.wins} / ${u.losses}`
+    `⭐ Уровень: **${u.level} LVL** (${u.experience}/${u.level * 100} EXP)\n` +
+    `💰 Баланс: **${u.balance.toLocaleString()} монет**\n` +
+    `🏆 Победы / Поражения: ${u.wins} / ${u.losses}`
   );
 });
 
@@ -135,9 +152,9 @@ async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🚀 BOT ISHGA TUSHDI VA O'YINLAR SOZLandi!");
+    console.log("🚀 БОТ УСПЕШНО ЗАПУЩЕН НА РУССКОМ ЯЗЫКЕ!");
   } catch (err) {
-    console.error("Xatolik:", err);
+    console.error("Ошибка запуска:", err);
   }
 }
 
