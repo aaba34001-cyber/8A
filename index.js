@@ -12,9 +12,7 @@ function isGroup(ctx) {
 async function isAdmin(ctx) {
   if (!ctx.from) return false;
   if (Number(ctx.from.id) === OWNER_ID) return true;
-  if (ctx.from.username && EXTRA_ADMINS.some(a => a.toLowerCase() === ctx.from.username.toLowerCase())) {
-    return true;
-  }
+  if (ctx.from.username && EXTRA_ADMINS.some(a => a.toLowerCase() === ctx.from.username.toLowerCase())) return true;
   if (!isGroup(ctx)) return false;
   try {
     const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
@@ -24,235 +22,200 @@ async function isAdmin(ctx) {
   }
 }
 
-function isImmune(userId, username) {
-  if (Number(userId) === OWNER_ID) return true;
-  if (username && EXTRA_ADMINS.some(a => a.toLowerCase() === username.toLowerCase())) {
-    return true;
-  }
-  return false;
-}
-
 const economyUsers = new Map();
-const userLastMessage = new Map();
-
-// Anti-Spam (1.2s)
-bot.use(async (ctx, next) => {
-  if (!ctx.from) return next();
-  const userId = ctx.from.id;
-  const now = Date.now();
-  if (userLastMessage.has(userId) && (now - userLastMessage.get(userId) < 1200)) {
-    return;
-  }
-  userLastMessage.set(userId, now);
-  return next();
-});
-
-const SERVICE_7_DAYS = 7 * 24 * 60 * 60 * 1000;
+const activeMinesGames = new Map(); // 7x7 Mina o'yini holati
 
 function ecoUser(ctx) {
   const id = String(ctx.from.id);
-  const now = Date.now();
   if (!economyUsers.has(id)) {
     economyUsers.set(id, {
       id: ctx.from.id,
       name: ctx.from.first_name || "Пользователь",
       username: ctx.from.username || null,
-      balance: 15000,
+      balance: 50000,
       bank: 0,
       vip: false,
       vipExpires: 0,
-      business: null,
-      car: null,
-      house: null,
-      jewelry: null,
-      phone: null,
-      yacht: null,
       lastBonus: 0,
-      lastWork: 0,
-      btc: 0,
-      eth: 0,
-      ton: 0,
-      notcoin: 0,
-      dogs: 0
+      lastWork: 0
     });
   }
-  const u = economyUsers.get(id);
-  if (ctx.from.username && EXTRA_ADMINS.includes(ctx.from.username.toLowerCase())) {
-    u.vip = true;
-    u.vipExpires = now + SERVICE_7_DAYS * 52;
-  }
-  return u;
+  return economyUsers.get(id);
 }
 
 function ecoName(u) {
-  const nameStr = u.username ? `@${u.username}` : u.name;
-  const isVipActive = u.vip && (u.vipExpires === 0 || Date.now() < u.vipExpires);
-  return `${nameStr}${isVipActive ? " 👑VIP" : ""}`;
+  return u.username ? `@${u.username}` : u.name;
 }
 
-// ==================== ASOSIY BUYRUQLAR (KOMANDALAR) ====================
+// ==================== 7x7 MINA O'YINI (BUTTON LI) ====================
 
-// Start
-bot.hears(/^!?старт[\s\.]*$/i, async (ctx) => {
+bot.hears(/^!?(мины|mina|мины) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  await ctx.reply(
-    `👋 **Приветствуем, ${u.name}!**\n\n` +
-    `🤖 **8-A ULTIMATE MULTI-BOT**\n\n` +
-    `📌 **Доступные разделы:**\n` +
-    `• \`Баланс\` / \`Профиль\` — Личный кабинет\n` +
-    `• \`Магазин\` — Авто, Дома, Бизнесы, Гаджеты\n` +
-    `• \`Донат\` — Stars оркали VIP ва монеталар\n` +
-    `• \`Трейдинг\` — Крипто-биржа (BTC, ETH, TON...)\n` +
-    `• \`Банк\` — Хранение денег под процент\n` +
-    `• \`Игры\` — Список 21 мини-игры`
-  );
-});
-
-// Profile / Balance
-bot.hears(/^!?(профиль|profile|баланс|balance)[\s\.]*$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  await ctx.reply(
-    `👤 **ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ**\n\n` +
-    `Имя: ${ecoName(u)}\n` +
-    `🆔 ID: \`${u.id}\`\n` +
-    `🪙 Кошелек: **${u.balance.toLocaleString()} монет**\n` +
-    `🏦 Банк: **${u.bank.toLocaleString()} монет**\n\n` +
-    `💼 Криптопортфель:\n` +
-    `• BTC: ${u.btc} | ETH: ${u.eth} | TON: ${u.ton}\n` +
-    `• NOT: ${u.notcoin} | DOGS: ${u.dogs}\n\n` +
-    `📱 Телефон: ${u.phone || "Нет"}\n` +
-    `🏎️ Авто: ${u.car || "Нет"}\n` +
-    `🏰 Дом: ${u.house || "Нет"}\n` +
-    `💼 Бизнес: ${u.business || "Нет"}\n` +
-    `💎 Украшение: ${u.jewelry || "Нет"}\n` +
-    `🛥️ Элитный транспорт: ${u.yacht || "Нет"}`
-  );
-});
-
-// Bank System
-bot.hears(/^!?(банк|bank)[\s\.]*$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  await ctx.reply(
-    `🏦 **НАЦИОНАЛЬНЫЙ БАНК**\n\n` +
-    `💰 В кошельке: **${u.balance.toLocaleString()} монет**\n` +
-    `🏛️ На банковском счету: **${u.bank.toLocaleString()} монет**\n\n` +
-    `📝 **Команды банка:**\n` +
-    `• \`!банк положить [сумма]\` — Депозит в банк\n` +
-    `• \`!банк снять [сумма]\` — Снять деньги с банка`
-  );
-});
-
-bot.hears(/^!банк (положить|пополнить) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const amount = Number(ctx.match[2]);
-  if (u.balance < amount) return ctx.reply("❌ Недостаточно средств в кошельке!");
-  u.balance -= amount;
-  u.bank += amount;
-  await ctx.reply(`✅ Вы успешно положили в банк **${amount.toLocaleString()} монет**!`);
-});
-
-bot.hears(/^!банк (снять|забрать) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const amount = Number(ctx.match[2]);
-  if (u.bank < amount) return ctx.reply("❌ Недостаточно средств на банковском счету!");
-  u.bank -= amount;
-  u.balance += amount;
-  await ctx.reply(`✅ Вы успешно сняли с банка **${amount.toLocaleString()} монет**!`);
-});
-
-// Games List
-bot.hears(/^!?(игры|игры|games)[\s\.]*$/i, async (ctx) => {
-  await ctx.reply(
-    `🎰 **СПИСОК ИГР И МИНИ-ИГР** 🎰\n\n` +
-    `🎮 **Развлекательные игры:**\n` +
-    `• \`!слот [ставка]\` — Игровой автомат\n` +
-    `• \`!кубик [1-6] [ставка]\` — Кости\n` +
-    `• \`!рулетка [красное/черное] [ставка]\`\n` +
-    `• \`!пирамида [ставка]\` — Опасная пирамида\n` +
-    `• \`!мины [ставка]\` — Поле с минами 7x7\n` +
-    `• \`!казино [ставка]\` — Классическое казино\n` +
-    `• \`!монета [орел/решка] [ставка]\`\n\n` +
-    `💡 *Чтобы начать играть, просто введите команду, например: \`!слот 1000\`*`
-  );
-});
-
-// Slot Game Example
-bot.hears(/^!слот (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[1]);
-  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств для ставки!");
+  const bet = Number(ctx.match[2]);
+  if (u.balance < bet) return ctx.reply("❌ Garov uchun mablag' yetarli emas!");
 
   u.balance -= bet;
-  const items = ["🍋", "7️⃣", "💎", "🍒", "🔔"];
-  const r1 = items[Math.floor(Math.random() * items.length)];
-  const r2 = items[Math.floor(Math.random() * items.length)];
-  const r3 = items[Math.floor(Math.random() * items.length)];
+  const userId = ctx.from.id;
 
-  let win = 0;
-  if (r1 === r2 && r2 === r3) win = bet * 5;
-  else if (r1 === r2 || r2 === r3 || r1 === r3) win = bet * 2;
+  // 7x7 setka (49 ta katak, 7 ta mina tasodifiy joylashtiriladi)
+  const mines = new Set();
+  while (mines.size < 7) {
+    mines.add(Math.floor(Math.random() * 49));
+  }
 
-  if (win > 0) {
-    u.balance += win;
-    await ctx.reply(`🎰 [ ${r1} | ${r2} | ${r3} ]\n🎉 Вы выиграли +🪙 **${win.toLocaleString()} монет**!`);
+  activeMinesGames.set(userId, {
+    bet: bet,
+    mines: mines,
+    revealed: new Set(),
+    multiplier: 1.0
+  });
+
+  await renderMinesGrid(ctx, userId, "💣 **7x7 MINA O'YINI**\n\nKatakchalarni tanlang va minalardan qoching!");
+});
+
+async function renderMinesGrid(ctx, userId, messageText) {
+  const game = activeMinesGames.get(userId);
+  if (!game) return;
+
+  const buttons = [];
+  for (let r = 0; r < 7; r++) {
+    const row = [];
+    for (let c = 0; c < 7; c++) {
+      const idx = r * 7 + c;
+      if (game.revealed.has(idx)) {
+        row.push(Markup.button.callback("💎", `mines_none`));
+      } else {
+        row.push(Markup.button.callback("🟦", `mines_click_${idx}`));
+      }
+    }
+    buttons.push(row);
+  }
+
+  buttons.push([Markup.button.callback(`💰 Yutuqni olish (${(game.bet * game.multiplier).toFixed(0)} монет)`, `mines_cashout`)]);
+
+  const keyboard = Markup.inlineKeyboard(buttons);
+  if (ctx.callbackQuery) {
+    await ctx.editMessageText(`${messageText}\n\n📊 Joriy ko'paytiruvchi: **x${game.multiplier.toFixed(2)}**`, keyboard);
   } else {
-    await ctx.reply(`🎰 [ ${r1} | ${r2} | ${r3} ]\n😔 Проигрыш! -🪙 **${bet.toLocaleString()} монет**`);
+    await ctx.reply(`${messageText}\n\n📊 Joriy ko'paytiruvchi: **x${game.multiplier.toFixed(2)}**`, keyboard);
+  }
+}
+
+bot.action(/^mines_click_(\d+)$/, async (ctx) => {
+  const userId = ctx.from.id;
+  const game = activeMinesGames.get(userId);
+  if (!game) return ctx.answerCbQuery("❌ O'yin topilmadi yoki yakunlangan!", { show_alert: true });
+
+  const idx = Number(ctx.match[1]);
+  if (game.mines.has(idx)) {
+    activeMinesGames.delete(userId);
+    return ctx.editMessageText(`💥 **BOMBA!** siz minaga tushdingiz va 🪙 **${game.bet}** yutqazdingiz.`);
+  }
+
+  game.revealed.add(idx);
+  game.multiplier += 0.25;
+
+  if (game.revealed.size === 42) {
+    const win = Math.floor(game.bet * game.multiplier);
+    const u = ecoUser(ctx);
+    u.balance += win;
+    activeMinesGames.delete(userId);
+    return ctx.editMessageText(`🎉 **MUKAMMAL!** Barcha xavfsiz kataklarni topdingiz va 🪙 **${win}** yutdingiz!`);
+  }
+
+  await renderMinesGrid(ctx, userId, "💣 **7x7 MINA O'YINI**");
+});
+
+bot.action("mines_cashout", async (ctx) => {
+  const userId = ctx.from.id;
+  const game = activeMinesGames.get(userId);
+  if (!game) return ctx.answerCbQuery("❌ Faol o'yin yo'q!", { show_alert: true });
+
+  const win = Math.floor(game.bet * game.multiplier);
+  const u = ecoUser(ctx);
+  u.balance += win;
+  activeMinesGames.delete(userId);
+
+  await ctx.editMessageText(`🤑 **YUTUQ OLINDI!** Siz 🪙 **${win.toLocaleString()} монет** yutib oldingiz!`);
+});
+
+bot.action("mines_none", (ctx) => ctx.answerCbQuery());
+
+// ==================== 21 TA O'YIN RO'YXATI VA BUYRUQLARI ====================
+
+bot.hears(/^!?(игры|games|o'yinlar)[\s\.]*$/i, async (ctx) => {
+  await ctx.reply(
+    `🎰 **21 TA MINI-O'YINLAR TIZIMI** 🎰\n\n` +
+    `1. \`!мина [garov]\` — 7x7 tugmali mina o'yini\n` +
+    `2. \`!кубик [1-6] [garov]\` — Zar tashlash\n` +
+    `3. \`!рулетка [red/black] [garov]\` — Ruletka\n` +
+    `4. \`!пирамида [garov]\` — Piramida pog'onasi\n` +
+    `5. \`!казино [garov]\` — Tasodifiy kazino\n` +
+    `6. \`!монета [орел/решка] [garov]\` — Tanga tashlash\n` +
+    `7. \`!сейф [garov]\` — Seif kodini topish\n` +
+    `8. \`!дуэль [garov]\` — Qudratli duel\n` +
+    `9. \`!суперкубик [garov]\` — Ikki karra zar\n` +
+    `10. \`!блэкджек [garov]\` — 21 ochko\n` +
+    `11. \`!фортуна [garov]\` — Omad g'ildiragi\n` +
+    `12. \`!скачки [garov]\` — Ot poygasi\n` +
+    `13. \`!лотерея\` — Kunlik omadli chipta\n` +
+    `14. \`!футбол [garov]\` — Penalti tepish\n` +
+    `15. \`!баскетбол [garov]\` — To'p oshirish\n` +
+    `16. \`!боулинг [garov]\` — Kegli yiqitish\n` +
+    `17. \`!дартс [garov]\` — Nishonga urish\n` +
+    `18. \`!коробка [garov]\` — Sirli quti\n` +
+    `19. \`!краш [garov]\` — Ko'paytiruvchi grafik\n` +
+    `20. \`!хайло [garov]\` — Baland yoki past\n` +
+    `21. \`!камень [garov]\` — Tosh, qaychi, qog'oz`
+  );
+});
+
+// O'yin namunalari
+bot.hears(/^!кубик ([1-6]) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const choice = Number(ctx.match[1]);
+  const bet = Number(ctx.match[2]);
+  if (u.balance < bet) return ctx.reply("❌ Balansda pul kam!");
+
+  u.balance -= bet;
+  const res = Math.floor(Math.random() * 6) + 1;
+  if (res === choice) {
+    const win = bet * 4;
+    u.balance += win;
+    await ctx.reply(`🎲 Zar tushdi: **${res}**!\n🎉 Yutdingiz: +🪙 **${win}**!`);
+  } else {
+    await ctx.reply(`🎲 Zar tushdi: **${res}**.\n😔 Yutqazdingiz: -🪙 **${bet}**.`);
   }
 });
 
-// Multi-Game: Pyramid
 bot.hears(/^!пирамида (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const bet = Number(ctx.match[1]);
-  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
+  if (u.balance < bet) return ctx.reply("❌ Balansda pul kam!");
 
   u.balance -= bet;
-  const win = Math.random() > 0.45;
-  if (win) {
-    const prize = Math.floor(bet * 1.8);
-    u.balance += prize;
-    await ctx.reply(`🔺 **ПИРАМИДА**\n✨ Вы успешно поднялись и выиграли 🪙 **${prize.toLocaleString()} монет**!`);
+  if (Math.random() > 0.48) {
+    const win = Math.floor(bet * 1.9);
+    u.balance += win;
+    await ctx.reply(`🔺 **Piramida cho'qqisi zabt etildi!** Yutuq: 🪙 **${win}**!`);
   } else {
-    await ctx.reply(`🔺 **ПИРАМИДА**\n💥 Пирамида обрушилась! Вы потеряли 🪙 **${bet.toLocaleString()} монет**.`);
+    await ctx.reply(`🔺 **Piramida yiqildi!** Yutqazdingiz: 🪙 **${bet}**.`);
   }
 });
 
-// SHOP & DONATE MODULES
-bot.hears(/^!?(магазин|shop|magazin)[\s\.]*$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback("👑 VIP 7 дней - 100,000", "shop_vip_7")],
-    [Markup.button.callback("🏎️ Автосалон", "cat_cars")],
-    [Markup.button.callback("🏰 Недвижимость", "cat_houses")],
-    [Markup.button.callback("💼 Бизнесы", "cat_biz")]
-  ]);
-  await ctx.reply(`🛍️ **ГЛАВНЫЙ МАГАЗИН**\n💰 Баланс: 🪙 **${u.balance.toLocaleString()}**`, keyboard);
-});
-
-bot.hears(/^!?(донат|donat|stars)[\s\.]*$/i, async (ctx) => {
-  const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback("⭐ 50 Stars ➔ 🪙 6,000,000", "buy_stars_50")],
-    [Markup.button.callback("👑 7 Дней VIP ➔ ⭐ 75 Stars", "buy_vip_stars_7")]
-  ]);
-  await ctx.reply(`⭐ **ДОНАТ STARS**\nВыберите пакет:`, keyboard);
-});
-
+// START VA BOSHQA BO'LIMLAR
 bot.command("start", async (ctx) => {
-  const u = ecoUser(ctx);
-  await ctx.reply(`👋 Привет, ${u.name}! Введите **Старт** или **Игры** для начала.`);
+  await ctx.reply("👋 Xush kelibsiz! `Игры` deb yozing va 21 ta o'yinni ko'ring.");
 });
 
 async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🔥 Bot mukammal ishga tushdi!");
+    console.log("🔥 Bot to'liq yangilandi!");
   } catch (err) {
-    console.error(" Xatolik:", err);
+    console.error(err);
   }
 }
 
 startBot();
-
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
