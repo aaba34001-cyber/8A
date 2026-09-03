@@ -397,7 +397,7 @@ bot.hears(/^купить дом (\d+)$/i, async (ctx) => {
 bot.hears(/^купить тел (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const idx = Number(ctx.match[1]) - 1;
-  if (!PHONES[idx]) return ctx.reply("❌ такого телефона не существует!");
+  if (!PHONES[idx]) return ctx.reply("❌ Такого телефона не существует!");
   const phone = PHONES[idx];
   if (u.balance < phone.price) return ctx.reply("❌ У вас недостаточно денег!");
 
@@ -623,7 +623,7 @@ bot.hears(/^admin$/i, async (ctx) => {
   await ctx.reply(
     `👑 **ПАНЕЛЬ АДМИНИСТРАТОРА**\n\n` +
     `➕ \`addbal [ID] [сумма]\` — Выдать деньги игроку\n` +
-    `➖ \`delbal [ID] [сумма]\` — Забрать деньги у игрока\n` +
+    `➖ \`delbal [ID] [сумма]\` — Забрать деньги у игроку\n` +
     `📢 \`sendall [текст]\` — Рассылка всем пользователям`,
     { parse_mode: "Markdown" }
   );
@@ -650,7 +650,7 @@ bot.hears(/^delbal\s+(\d+)\s+(\d+)$/i, async (ctx) => {
   const targetUser = economyUsers.get(targetId);
   targetUser.balance = Math.max(0, targetUser.balance - amount);
   saveDB();
-  await ctx.reply(`✅ У пользователя \`${targetId}\` списано $${amount.toLocaleString()}!`, { parse_mode: "Markdown" });
+  await ctx.reply(`✅ У пользователя \`${targetId}\` списано $${amount.toLocaleString()}!`, { parse_node: "Markdown" });
 });
 
 bot.hears(/^sendall\s+(.+)$/i, async (ctx) => {
