@@ -437,7 +437,7 @@ bot.hears(/^пирамида\s+(\d+)$/i, async (ctx) => {
     [Markup.button.callback("💎 Ячейка 3", `pyr_${ctx.from.id}_${bet}_2`), Markup.button.callback("💎 Ячейка 4", `pyr_${ctx.from.id}_${bet}_3`)]
   ]);
 
-  await ctx.reply(`🔺 **ИГРА ПИРАМИДА**\nСтавка: $${bet.toLocaleString()}\nВыберите удачную ячейку (х2 выигрыш):`, { parse_mode: "Markdown", ...keyboard });
+  await ctx.reply(`🔺 **ИГРА ПИРАМИДА**\nСтавка: $${bet.toLocaleString()}\nВыберите удачную ячейку (х2.2 выигрыш):`, { parse_mode: "Markdown", ...keyboard });
 });
 
 bot.action(/^pyr_(\d+)_(\d+)_(\d+)$/, async (ctx) => {
@@ -445,11 +445,14 @@ bot.action(/^pyr_(\d+)_(\d+)_(\d+)$/, async (ctx) => {
   const bet = Number(ctx.match[2]);
   const chosen = Number(ctx.match[3]);
   const u = ecoUser(ctx);
-  const winIdx = Math.floor(Math.random() * 4);
+  
+  // 50% imkoniyat (4 tadan 2 tasi yutuqli)
+  const winIndexes = [0, 1]; 
+  const isWin = winIndexes.includes(Math.floor(Math.random() * 4));
 
   let text = "";
-  if (chosen === winIdx) {
-    const prize = bet * 2;
+  if (isWin) {
+    const prize = Math.floor(bet * 2.2);
     u.balance += prize;
     u.wins++;
     addExp(u, 15);
@@ -471,7 +474,7 @@ bot.hears(/^мина\s+(\d+)$/i, async (ctx) => {
   if (u.balance < bet) return ctx.reply("❌ Недостаточно средств на балансе!");
 
   u.balance -= bet;
-  u.mineGrid = { bet, opened: 0 };
+  u.mineGrid = { bet, opened: 0, currentMultiplier: 1.0 };
   saveDB();
 
   const rows = [];
@@ -482,9 +485,10 @@ bot.hears(/^мина\s+(\d+)$/i, async (ctx) => {
     }
     rows.push(rowBtns);
   }
+  rows.push([Markup.button.callback("🛑 ЗАБРАТЬ ВЫИГРЫШ ($" + bet.toLocaleString() + ")", `mine_cash_${ctx.from.id}`)]);
   const keyboard = Markup.inlineKeyboard(rows);
 
-  await ctx.reply(`💣 **МИННОЕ ПОЛЕ 7x7**\nСтавка: $${bet.toLocaleString()}\nВыберите безопасную ячейку:`, { parse_mode: "Markdown", ...keyboard });
+  await ctx.reply(`💣 **МИННОЕ ПОЛЕ 7x7**\nСтавка: $${bet.toLocaleString()}\nТекущий выигрыш: $${bet.toLocaleString()} (х1.0)\nВыберите безопасную ячейку:`, { parse_mode: "Markdown", ...keyboard });
 });
 
 bot.action(/^mine_(\d+)_(\d+)_(\d+)$/, async (ctx) => {
@@ -492,9 +496,10 @@ bot.action(/^mine_(\d+)_(\d+)_(\d+)$/, async (ctx) => {
   if (String(ctx.from.id) !== targetId) return ctx.answerCbQuery("❌ Эта игра не ваша!", { show_alert: true });
   
   const u = ecoUser(ctx);
-  if (!u.mineGrid) return ctx.answerCbQuery("❌ Игра не найдена!", { show_alert: true });
+  if (!u.mineGrid) return ctx.answerCbQuery("❌ Игра не найдена или уже завершена!", { show_alert: true });
 
-  const isBomb = Math.random() < 0.22;
+  // 15% mina chiqish ehtimoli (avvalgi 22% o'rniga osonroq)
+  const isBomb = Math.random() < 0.15;
   if (isBomb) {
     u.losses++;
     const lostBet = u.mineGrid.bet;
@@ -504,11 +509,41 @@ bot.action(/^mine_(\d+)_(\d+)_(\d+)$/, async (ctx) => {
     return ctx.answerCbQuery("Мина взорвалась!");
   } else {
     u.mineGrid.opened++;
-    const multiplier = 1 + (u.mineGrid.opened * 0.35);
-    const currentPrize = Math.floor(u.mineGrid.bet * multiplier);
+    u.mineGrid.currentMultiplier = Number((1 + (u.mineGrid.opened * 0.4)).toFixed(2));
+    const currentPrize = Math.floor(u.mineGrid.bet * u.mineGrid.currentMultiplier);
     saveDB();
-    await ctx.answerCbQuery(`+$${currentPrize.toLocaleString()} (Отлично!)`);
+
+    const rows = [];
+    for (let r = 0; r < 7; r++) {
+      const rowBtns = [];
+      for (let c = 0; c < 7; c++) {
+        rowBtns.push(Markup.button.callback("🟩", `mine_${ctx.from.id}_${r}_${c}`));
+      }
+      rows.push(rowBtns);
+    }
+    rows.push([Markup.button.callback(`🛑 ЗАБРАТЬ ВЫИГРЫШ ($${currentPrize.toLocaleString()})`, `mine_cash_${ctx.from.id}`)]);
+    
+    await ctx.editMessageText(`💣 **МИННОЕ ПОЛЕ 7x7**\nСтавка: $${u.mineGrid.bet.toLocaleString()}\nОткрыто ячеек: ${u.mineGrid.opened}\nТекущий выигрыш: **$${currentPrize.toLocaleString()}** (х${u.mineGrid.currentMultiplier})\nВыберите следующую ячейку:`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard(rows).reply_markup }).catch(() => {});
+    return ctx.answerCbQuery(`+$${currentPrize.toLocaleString()}! Дальше или Забрать?`);
   }
+});
+
+bot.action(/^mine_cash_(\d+)$/, async (ctx) => {
+  const targetId = ctx.match[1];
+  if (String(ctx.from.id) !== targetId) return ctx.answerCbQuery("❌ Эта игра не ваша!", { show_alert: true });
+
+  const u = ecoUser(ctx);
+  if (!u.mineGrid) return ctx.answerCbQuery("❌ Игра не найдена!", { show_alert: true });
+
+  const prize = Math.floor(u.mineGrid.bet * u.mineGrid.currentMultiplier);
+  u.balance += prize;
+  u.wins++;
+  addExp(u, 20);
+  u.mineGrid = null;
+  saveDB();
+
+  await ctx.editMessageText(`🎉 **ВЫ УСПЕШНО ЗАБРАЛИ ВЫИГРЫШ!**\n\n💰 Награда: **+$${prize.toLocaleString()}**`, { parse_mode: "Markdown" }).catch(() => {});
+  await ctx.answerCbQuery("Pul muvaffaqiyatli balansga qo'shildi!");
 });
 
 bot.hears(/^трейдинг\s+(\d+)$/i, async (ctx) => {
@@ -650,7 +685,7 @@ bot.hears(/^delbal\s+(\d+)\s+(\d+)$/i, async (ctx) => {
   const targetUser = economyUsers.get(targetId);
   targetUser.balance = Math.max(0, targetUser.balance - amount);
   saveDB();
-  await ctx.reply(`✅ У пользователя \`${targetId}\` списано $${amount.toLocaleString()}!`, { parse_node: "Markdown" });
+  await ctx.reply(`✅ У пользователя \`${targetId}\` списано $${amount.toLocaleString()}!`, { parse_mode: "Markdown" });
 });
 
 bot.hears(/^sendall\s+(.+)$/i, async (ctx) => {
