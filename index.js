@@ -36,6 +36,15 @@ function ecoUser(ctx) {
       phone: "Отсутствует",
       yacht: "Отсутствует",
       plane: "Отсутствует",
+      // Muddatlarni saqlash (7 kunlik timer)
+      buyDates: {
+        car: 0,
+        house: 0,
+        phone: 0,
+        business: 0,
+        yacht: 0,
+        plane: 0
+      },
       lastBonus: 0,
       lastWork: 0,
       lastCrime: 0,
@@ -46,6 +55,9 @@ function ecoUser(ctx) {
     const u = economyUsers.get(id);
     u.name = ctx.from.first_name || u.name;
     u.username = ctx.from.username || u.username;
+    if (!u.buyDates) {
+      u.buyDates = { car: 0, house: 0, phone: 0, business: 0, yacht: 0, plane: 0 };
+    }
   }
   return economyUsers.get(id);
 }
@@ -71,6 +83,7 @@ function ecoUserById(userId, name, username) {
       phone: "Отсутствует",
       yacht: "Отсутствует",
       plane: "Отсутствует",
+      buyDates: { car: 0, house: 0, phone: 0, business: 0, yacht: 0, plane: 0 },
       lastBonus: 0,
       lastWork: 0,
       lastCrime: 0,
@@ -93,6 +106,20 @@ function addExp(u, amount) {
     u.experience = 0;
     u.balance += u.level * 25000;
   }
+}
+
+// 7 Kunlik muddatni tekshirish funksiyasi
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+function checkCooldown(lastTime) {
+  const now = Date.now();
+  if (now - lastTime < SEVEN_DAYS_MS) {
+    const remainingMs = SEVEN_DAYS_MS - (now - lastTime);
+    const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((remainingMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    return { canBuy: false, text: `${days} дней и ${hours} часов` };
+  }
+  return { canBuy: true };
 }
 
 // ==================== CATALOG DATA ====================
@@ -280,6 +307,7 @@ bot.hears(/^(ник|nick) (.+)$/i, async (ctx) => {
 bot.hears(/^(магазин|magazin|shop)$/i, async (ctx) => {
   await ctx.reply(
     `🛒 **ГЛАВНЫЙ СУПЕРМАРКЕТ И РЫНОК**\n\n` +
+    `⏳ *Все покупки выдаются ровно на 7 дней!*\n\n` +
     `🚘 **Автосалон:** \`автосалон\` или \`магазин машины\`\n` +
     `🏠 **Недвижимость:** \`недвижимость\` или \`магазин дома\`\n` +
     `📱 **Электроника:** \`телефоны\` или \`магазин телефоны\`\n` +
@@ -337,9 +365,15 @@ bot.hears(/^((магазин|magazin) (самолеты|самолет)|авиа
   await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
-// PURCHASES
+// PURCHASES WITH 7-DAYS LIMIT
+
 bot.hears(/^(купить|sotib) (машину|авто) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
+  const cd = checkCooldown(u.buyDates.car);
+  if (!cd.canBuy) {
+    return ctx.reply(`⏳ **У вас уже есть машина!** Повторная покупка будет доступна через **${cd.text}**.`);
+  }
+
   const idx = Number(ctx.match[3]) - 1;
   if (!CARS[idx]) return ctx.reply("❌ Такой машины нет в каталоге!");
   const item = CARS[idx];
@@ -347,12 +381,18 @@ bot.hears(/^(купить|sotib) (машину|авто) (\d+)$/i, async (ctx) =
 
   u.balance -= item.price;
   u.car = item.name;
+  u.buyDates.car = Date.now();
   addExp(u, 30);
-  await ctx.reply(`🎉 Поздравляем! Вы успешно купили **${item.name}**!`);
+  await ctx.reply(`🎉 Поздравляем! Вы успешно купили **${item.name}** на **7 дней**!`);
 });
 
 bot.hears(/^(купить|sotib) (дом) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
+  const cd = checkCooldown(u.buyDates.house);
+  if (!cd.canBuy) {
+    return ctx.reply(`⏳ **У вас уже есть недвижимость!** Повторная покупка будет доступна через **${cd.text}**.`);
+  }
+
   const idx = Number(ctx.match[3]) - 1;
   if (!HOUSES[idx]) return ctx.reply("❌ Такого дома нет в каталоге!");
   const item = HOUSES[idx];
@@ -360,12 +400,18 @@ bot.hears(/^(купить|sotib) (дом) (\d+)$/i, async (ctx) => {
 
   u.balance -= item.price;
   u.house = item.name;
+  u.buyDates.house = Date.now();
   addExp(u, 50);
-  await ctx.reply(`🏡 Поздравляем! Ваше новое жилье: **${item.name}**!`);
+  await ctx.reply(`🏡 Поздравляем! Ваше новое жилье: **${item.name}** (на **7 дней**)!`);
 });
 
 bot.hears(/^(купить|sotib) (телефон) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
+  const cd = checkCooldown(u.buyDates.phone);
+  if (!cd.canBuy) {
+    return ctx.reply(`⏳ **У вас уже есть телефон!** Повторная покупка будет доступна через **${cd.text}**.`);
+  }
+
   const idx = Number(ctx.match[3]) - 1;
   if (!PHONES[idx]) return ctx.reply("❌ Такого телефона нет!");
   const item = PHONES[idx];
@@ -373,12 +419,18 @@ bot.hears(/^(купить|sotib) (телефон) (\d+)$/i, async (ctx) => {
 
   u.balance -= item.price;
   u.phone = item.name;
+  u.buyDates.phone = Date.now();
   addExp(u, 15);
-  await ctx.reply(`📱 Вы купили новый телефон: **${item.name}**!`);
+  await ctx.reply(`📱 Вы купили новый телефон: **${item.name}** (на **7 дней**)!`);
 });
 
 bot.hears(/^(купить|sotib) (бизнес) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
+  const cd = checkCooldown(u.buyDates.business);
+  if (!cd.canBuy) {
+    return ctx.reply(`⏳ **У вас уже есть активный бизнес!** Повторная покупка будет доступна через **${cd.text}**.`);
+  }
+
   const idx = Number(ctx.match[3]) - 1;
   if (!BIZ[idx]) return ctx.reply("❌ Такого бизнеса нет!");
   const item = BIZ[idx];
@@ -388,12 +440,18 @@ bot.hears(/^(купить|sotib) (бизнес) (\d+)$/i, async (ctx) => {
   u.business = item.name;
   u.bizIncome = item.income;
   u.lastBizCollect = Date.now();
+  u.buyDates.business = Date.now();
   addExp(u, 120);
-  await ctx.reply(`🏢 Поздравляем! Вы стали владельцем бизнеса **${item.name}**!\n📈 Доход: **+${item.income.toLocaleString()} монет/час**.\n\nСобирать прибыль: \`прибыль\``);
+  await ctx.reply(`🏢 Поздравляем! Вы стали владельцем бизнеса **${item.name}** (на **7 дней**)!\n📈 Доход: **+${item.income.toLocaleString()} монет/час**.\n\nСобирать прибыль: \`прибыль\``);
 });
 
 bot.hears(/^(купить|sotib) (яхту) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
+  const cd = checkCooldown(u.buyDates.yacht);
+  if (!cd.canBuy) {
+    return ctx.reply(`⏳ **У вас уже есть яхта!** Повторная покупка будет доступна через **${cd.text}**.`);
+  }
+
   const idx = Number(ctx.match[3]) - 1;
   if (!YACHTS[idx]) return ctx.reply("❌ Такой яхты нет!");
   const item = YACHTS[idx];
@@ -401,12 +459,18 @@ bot.hears(/^(купить|sotib) (яхту) (\d+)$/i, async (ctx) => {
 
   u.balance -= item.price;
   u.yacht = item.name;
+  u.buyDates.yacht = Date.now();
   addExp(u, 80);
-  await ctx.reply(`🛥 Вы купили роскошную яхту: **${item.name}**!`);
+  await ctx.reply(`🛥 Вы купили роскошную яхту: **${item.name}** (на **7 дней**)!`);
 });
 
 bot.hears(/^(купить|sotib) (самолет) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
+  const cd = checkCooldown(u.buyDates.plane);
+  if (!cd.canBuy) {
+    return ctx.reply(`⏳ **У вас уже есть самолет!** Повторная покупка будет доступна через **${cd.text}**.`);
+  }
+
   const idx = Number(ctx.match[3]) - 1;
   if (!PLANES[idx]) return ctx.reply("❌ Такого самолета нет!");
   const item = PLANES[idx];
@@ -414,12 +478,22 @@ bot.hears(/^(купить|sotib) (самолет) (\d+)$/i, async (ctx) => {
 
   u.balance -= item.price;
   u.plane = item.name;
+  u.buyDates.plane = Date.now();
   addExp(u, 150);
-  await ctx.reply(`✈️ Вы купили личный самолет: **${item.name}**!`);
+  await ctx.reply(`✈️ Вы купили личный самолет: **${item.name}** (на **7 дней**)!`);
 });
 
 bot.hears(/^(прибыль|pribil|доход)$/i, async (ctx) => {
   const u = ecoUser(ctx);
+  
+  // Biznes 7 kundan o'tgan bo'lsa daromad bermaydi
+  const cd = checkCooldown(u.buyDates.business);
+  if (!cd.canBuy && u.buyDates.business > 0) {
+    u.business = "Отсутствует";
+    u.bizIncome = 0;
+    return ctx.reply("⏳ **Срок аренды вашего бизнеса истек (7 дней)!** Вы можете купить новый бизнес.");
+  }
+
   if (u.bizIncome <= 0) return ctx.reply("❌ У вас пока нет ни одного бизнеса!");
 
   const now = Date.now();
@@ -728,6 +802,26 @@ bot.hears(/^(баланс|balans)$/i, async (ctx) => {
 
 bot.hears(/^(профиль|проф|profile)$/i, async (ctx) => {
   const u = ecoUser(ctx);
+  
+  // Profil ko'rilganda muddati tugagan narsalarni tozalash
+  const checkExpired = (key, propName) => {
+    if (u.buyDates[key] > 0) {
+      const cd = checkCooldown(u.buyDates[key]);
+      if (cd.canBuy) {
+        u[propName] = "Отсутствует";
+        u.buyDates[key] = 0;
+        if (key === "business") u.bizIncome = 0;
+      }
+    }
+  };
+
+  checkExpired("car", "car");
+  checkExpired("house", "house");
+  checkExpired("phone", "phone");
+  checkExpired("business", "business");
+  checkExpired("yacht", "yacht");
+  checkExpired("plane", "plane");
+
   await ctx.reply(
     `👤 **ПРОФИЛЬ ИГРОКА:**\n\n` +
     `👨‍💼 Имя: **${ecoName(u)}**\n` +
@@ -749,6 +843,7 @@ bot.hears(/^(профиль|проф|profile)$/i, async (ctx) => {
 bot.hears(/^(игры|меню|menu|start|старт)$/i, async (ctx) => {
   await ctx.reply(
     `📜 **ПОЛНОЕ МЕНЮ И КОМАНДЫ БОТА**\n\n` +
+    `⏳ *Все покупки (машины, дома и т.д.) даются на 7 дней!*\n\n` +
     `🏦 **Банк и Кредиты:**\n` +
     `• \`банк\` — Главная страница банка\n` +
     `• \`банк депозит [сумма]\` / \`банк снять [сумма]\`\n` +
@@ -771,7 +866,7 @@ async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🚀 BOT UPDATED WITH EXPLICIT BUY COMMANDS!");
+    console.log("🚀 BOT UPDATED WITH 7-DAYS COOLDOWN FOR PURCHASES!");
   } catch (err) {
     console.error("Start Error:", err);
   }
