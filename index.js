@@ -336,5 +336,5 @@ async function startBot() {
 
 startBot();
 
-process.process.once("SIGINT", () => bot.stop("SIGINT"));
+process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
