@@ -8,23 +8,24 @@ if (!token) {
 }
 
 const bot = new Telegraf(token);
-const OWNER_ID = Number(process.env.OWNER_ID || 8480297110);
 
-// Global State
+const ADMIN_ID = 123456789; 
+
 const economyUsers = new Map();
 const activeMinesGames = new Map();
 const activePyramidGames = new Map();
 
-// User Helper
 function ecoUser(ctx) {
   const id = String(ctx.from.id);
   if (!economyUsers.has(id)) {
     economyUsers.set(id, {
       id: ctx.from.id,
       name: ctx.from.first_name || "Игрок",
+      nickname: null,
       username: ctx.from.username || null,
       balance: 50000,
       bank: 0,
+      credit: 0,
       experience: 0,
       level: 1,
       business: "Отсутствует",
@@ -49,7 +50,39 @@ function ecoUser(ctx) {
   return economyUsers.get(id);
 }
 
+function ecoUserById(userId, name, username) {
+  const id = String(userId);
+  if (!economyUsers.has(id)) {
+    economyUsers.set(id, {
+      id: userId,
+      name: name || "Игрок",
+      nickname: null,
+      username: username || null,
+      balance: 50000,
+      bank: 0,
+      credit: 0,
+      experience: 0,
+      level: 1,
+      business: "Отсутствует",
+      bizIncome: 0,
+      lastBizCollect: 0,
+      car: "Отсутствует",
+      house: "Отсутствует",
+      phone: "Отсутствует",
+      yacht: "Отсутствует",
+      plane: "Отсутствует",
+      lastBonus: 0,
+      lastWork: 0,
+      lastCrime: 0,
+      wins: 0,
+      losses: 0
+    });
+  }
+  return economyUsers.get(id);
+}
+
 function ecoName(u) {
+  if (u.nickname) return u.nickname;
   return u.username ? `@${u.username}` : u.name;
 }
 
@@ -62,7 +95,7 @@ function addExp(u, amount) {
   }
 }
 
-// ==================== EXTENDED SHOP DATA ====================
+// ==================== CATALOG DATA ====================
 
 const CARS = [
   { name: "🚲 Велосипед", price: 5000 },
@@ -128,71 +161,183 @@ const PLANES = [
   { name: "🚀 Личный Boeing 747", price: 200000000 }
 ];
 
-// ==================== SHOP COMMANDS ====================
+// ==================== REPLY & ID TRANSFER ====================
+
+bot.hears(/^(перевод|передать|perevod|per)(?:\s+(\d+))?(?:\s+(\d+))?$/i, async (ctx) => {
+  const sender = ecoUser(ctx);
+  const arg1 = ctx.match[2];
+  const arg2 = ctx.match[3];
+
+  let targetUser = null;
+  let amount = 0;
+
+  if (ctx.message.reply_to_message) {
+    const replyMsg = ctx.message.reply_to_message;
+    if (replyMsg.from.is_bot) return ctx.reply("❌ Нельзя переводить деньги ботам!");
+    if (replyMsg.from.id === ctx.from.id) return ctx.reply("❌ Вы не можете переводить деньги самому себе!");
+
+    amount = Number(arg1);
+    if (!amount || amount <= 0) return ctx.reply("❌ Укажите сумму для перевода! Пример: `перевод 5000` (ответом на сообщение)");
+
+    targetUser = ecoUserById(replyMsg.from.id, replyMsg.from.first_name, replyMsg.from.username);
+  } else if (arg1 && arg2) {
+    const targetId = String(arg1);
+    amount = Number(arg2);
+
+    if (targetId === String(ctx.from.id)) return ctx.reply("❌ Вы не можете переводить деньги самому себе!");
+    if (!economyUsers.has(targetId)) return ctx.reply("❌ Пользователь не найден в базе бота!");
+
+    targetUser = economyUsers.get(targetId);
+  } else {
+    return ctx.reply("💡 **Способы перевода:**\n1. Ответьте на сообщение игрока: `перевод [сумма]`\n2. По ID игрока: `перевод [ID] [сумма]`");
+  }
+
+  if (sender.balance < amount) return ctx.reply("❌ Недостаточно средств для перевода!");
+
+  sender.balance -= amount;
+  targetUser.balance += amount;
+
+  await ctx.reply(`💸 Вы успешно перевели **${amount.toLocaleString()} монет** игроку **${ecoName(targetUser)}**!`);
+});
+
+// ==================== BANK & CREDIT ====================
+
+bot.hears(/^(банк|bank)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  await ctx.reply(
+    `🏦 **ЦЕНТРАЛЬНЫЙ БАНК**\n\n` +
+    `💼 Баланс в банке: **${u.bank.toLocaleString()} монет**\n` +
+    `💵 Наличные средства: **${u.balance.toLocaleString()} монет**\n` +
+    `🔻 Долг по кредиту: **${u.credit.toLocaleString()} монет**\n\n` +
+    `📋 **Команды банка:**\n` +
+    `• \`банк депозит [сумма]\` — положить деньги на счет\n` +
+    `• \`банк снять [сумма]\` — снять деньги со счета\n` +
+    `• \`кредит [сумма]\` — взять кредит в банке\n` +
+    `• \`погасить [сумма]\` — выплатить долг по кредиту`
+  );
+});
+
+bot.hears(/^(банк|bank) (депозит|положить) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const amount = Number(ctx.match[3]);
+  if (!amount || amount <= 0 || u.balance < amount) return ctx.reply("❌ Недостаточно наличных денег!");
+
+  u.balance -= amount;
+  u.bank += amount;
+  await ctx.reply(`🏦 Вы успешно положили в банк **${amount.toLocaleString()} монет**.\n💳 Счет в банке: **${u.bank.toLocaleString()} монет**.`);
+});
+
+bot.hears(/^(банк|bank) (снять|вывести) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const amount = Number(ctx.match[3]);
+  if (!amount || amount <= 0 || u.bank < amount) return ctx.reply("❌ На вашем банковском счету нет такой суммы!");
+
+  u.bank -= amount;
+  u.balance += amount;
+  await ctx.reply(`🏦 Вы успешно сняли со счета **${amount.toLocaleString()} монет**.\n💰 На руках: **${u.balance.toLocaleString()} монет**.`);
+});
+
+bot.hears(/^(кредит) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const amount = Number(ctx.match[2]);
+  const maxCredit = u.level * 100000;
+
+  if (u.credit > 0) return ctx.reply(`❌ У вас уже есть непогашенный кредит: **${u.credit.toLocaleString()} монет**!`);
+  if (amount > maxCredit) return ctx.reply(`❌ Максимальный кредит для вашего уровня: **${maxCredit.toLocaleString()} монет**!`);
+
+  const toPay = Math.floor(amount * 1.15);
+  u.credit = toPay;
+  u.balance += amount;
+  await ctx.reply(`💳 Вы получили кредит в размере **${amount.toLocaleString()} монет**.\n📈 К возврату (с 15% комиссией): **${toPay.toLocaleString()} монет**.`);
+});
+
+bot.hears(/^(погасить|pogashat) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const amount = Number(ctx.match[2]);
+
+  if (u.credit <= 0) return ctx.reply("🎉 У вас нет задолженностей по кредиту!");
+  if (amount <= 0 || u.balance < amount) return ctx.reply("❌ Недостаточно наличных монет!");
+
+  const pay = Math.min(amount, u.credit);
+  u.balance -= pay;
+  u.credit -= pay;
+  await ctx.reply(`✅ Вы выплатили **${pay.toLocaleString()} монет**.\n💳 Оставшийся долг: **${u.credit.toLocaleString()} монет**.`);
+});
+
+// ==================== NICKNAME ====================
+
+bot.hears(/^(ник|nick) (.+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const newNick = ctx.match[2].trim();
+  if (newNick.length > 20) return ctx.reply("❌ Ник слишком длинный! (макс. 20 символов)");
+
+  u.nickname = newNick;
+  await ctx.reply(`✅ Ваш новый никнейм успешно установлен: **${newNick}**`);
+});
+
+// ==================== SHOP & CARS ====================
 
 bot.hears(/^(магазин|magazin|shop)$/i, async (ctx) => {
   await ctx.reply(
-    `🛒 **ГЛАВНЫЙ СУПЕРМАРКЕТ И БИРЖА**\n\n` +
-    `Выберите нужную категорию:\n\n` +
-    `🚘 **Автосалон:** \`магазин машины\` или \`автосалон\`\n` +
-    `🏠 **Недвижимость:** \`магазин дома\` или \`недвижимость\`\n` +
-    `📱 **Электроника:** \`магазин телефоны\` или \`телефоны\`\n` +
-    `🏢 **Бизнес-Центр:** \`магазин бизнес\` или \`бизнесы\`\n` +
-    `🛥 **Яхты:** \`магазин яхты\` или \`яхты\`\n` +
-    `✈️ **Авиасалон:** \`магазин самолеты\` или \`авиасалон\`\n\n` +
-    `💡 *Чтобы купить, используйте команду с номером товара.*`
+    `🛒 **ГЛАВНЫЙ СУПЕРМАРКЕТ И РЫНОК**\n\n` +
+    `🚘 **Автосалон:** \`автосалон\` или \`магазин машины\`\n` +
+    `🏠 **Недвижимость:** \`недвижимость\` или \`магазин дома\`\n` +
+    `📱 **Электроника:** \`телефоны\` или \`магазин телефоны\`\n` +
+    `🏢 **Бизнес-Центр:** \`бизнесы\` или \`магазин бизнес\`\n` +
+    `🛥 **Яхт-Клуб:** \`яхты\` | ✈️ **Авиасалон:** \`авиасалон\`\n\n` +
+    `💡 *Чтобы купить предмет, скопируйте команду рядом с ним!*`
   );
 });
 
 bot.hears(/^((магазин|magazin) (машины|авто|mashina)|автосалон)$/i, async (ctx) => {
-  let text = `🚘 **АВТОСАЛОН (МАШИНЫ)**\n\n`;
+  let text = `🚘 **АВТОСАЛОН — ДОСТУПНЫЕ МАШИНЫ**\n\n💡 *Нажмите на команду, чтобы скопировать и отправить:*\n\n`;
   CARS.forEach((c, i) => {
-    text += `${i + 1}. **${c.name}** — ${c.price.toLocaleString()} монет (Купить: \`купить машину ${i + 1}\`)\n`;
+    text += `${i + 1}. **${c.name}**\n💰 Цена: **${c.price.toLocaleString()} монет**\n👉 Купить: \`купить машину ${i + 1}\`\n\n`;
   });
-  await ctx.reply(text);
+  await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
 bot.hears(/^((магазин|magazin) (дома|дом|dom)|недвижимость)$/i, async (ctx) => {
-  let text = `🏠 **РЫНОК НЕДВИЖИМОСТИ**\n\n`;
+  let text = `🏠 **РЫНОК НЕДВИЖИМОСТИ**\n\n💡 *Нажмите на команду, чтобы скопировать:*\n\n`;
   HOUSES.forEach((h, i) => {
-    text += `${i + 1}. **${h.name}** — ${h.price.toLocaleString()} монет (Купить: \`купить дом ${i + 1}\`)\n`;
+    text += `${i + 1}. **${h.name}**\n💰 Цена: **${h.price.toLocaleString()} монет**\n👉 Купить: \`купить дом ${i + 1}\`\n\n`;
   });
-  await ctx.reply(text);
+  await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
 bot.hears(/^((магазин|magazin) (телефоны|телефон)|телефоны)$/i, async (ctx) => {
   let text = `📱 **МАГАЗИН ЭЛЕКТРОНИКИ**\n\n`;
   PHONES.forEach((p, i) => {
-    text += `${i + 1}. **${p.name}** — ${p.price.toLocaleString()} монет (Купить: \`купить телефон ${i + 1}\`)\n`;
+    text += `${i + 1}. **${p.name}**\n💰 Цена: **${p.price.toLocaleString()} монет**\n👉 Купить: \`купить телефон ${i + 1}\`\n\n`;
   });
-  await ctx.reply(text);
+  await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
 bot.hears(/^((магазин|magazin) (бизнес|бизнесы)|бизнесы|бизнес)$/i, async (ctx) => {
   let text = `🏢 **БИРЖА ГОТОВОГО БИЗНЕСА**\n\n`;
   BIZ.forEach((b, i) => {
-    text += `${i + 1}. **${b.name}**\n   💰 Цена: **${b.price.toLocaleString()}** | 📈 Доход: **+${b.income.toLocaleString()}/час**\n   🛒 Купить: \`купить бизнес ${i + 1}\`\n\n`;
+    text += `${i + 1}. **${b.name}**\n💰 Цена: **${b.price.toLocaleString()}** | 📈 Доход: **+${b.income.toLocaleString()}/час**\n👉 Купить: \`купить бизнес ${i + 1}\`\n\n`;
   });
-  await ctx.reply(text);
+  await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
 bot.hears(/^((магазин|magazin) (яхты|яхта)|яхты)$/i, async (ctx) => {
   let text = `🛥 **ЯХТ-КЛУБ**\n\n`;
   YACHTS.forEach((y, i) => {
-    text += `${i + 1}. **${y.name}** — ${y.price.toLocaleString()} монет (Купить: \`купить яхту ${i + 1}\`)\n`;
+    text += `${i + 1}. **${y.name}**\n💰 Цена: **${y.price.toLocaleString()} монет**\n👉 Купить: \`купить яхту ${i + 1}\`\n\n`;
   });
-  await ctx.reply(text);
+  await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
 bot.hears(/^((магазин|magazin) (самолеты|самолет)|авиасалон|самолеты)$/i, async (ctx) => {
   let text = `✈️ **АВИАСАЛОН**\n\n`;
   PLANES.forEach((p, i) => {
-    text += `${i + 1}. **${p.name}** — ${p.price.toLocaleString()} монет (Купить: \`купить самолет ${i + 1}\`)\n`;
+    text += `${i + 1}. **${p.name}**\n💰 Цена: **${p.price.toLocaleString()} монет**\n👉 Купить: \`купить самолет ${i + 1}\`\n\n`;
   });
-  await ctx.reply(text);
+  await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
-// BUYING PROCESS
+// PURCHASES
 bot.hears(/^(купить|sotib) (машину|авто) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const idx = Number(ctx.match[3]) - 1;
@@ -273,7 +418,6 @@ bot.hears(/^(купить|sotib) (самолет) (\d+)$/i, async (ctx) => {
   await ctx.reply(`✈️ Вы купили личный самолет: **${item.name}**!`);
 });
 
-// BUSINESS PROFIT
 bot.hears(/^(прибыль|pribil|доход)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   if (u.bizIncome <= 0) return ctx.reply("❌ У вас пока нет ни одного бизнеса!");
@@ -289,7 +433,7 @@ bot.hears(/^(прибыль|pribil|доход)$/i, async (ctx) => {
   await ctx.reply(`💰 Ваш бизнес (**${u.business}**) принес вам **+${earned.toLocaleString()} монет** прибыли!`);
 });
 
-// ==================== WORK, CRIME & BANK ====================
+// ==================== WORK & CRIME ====================
 
 bot.hears(/^(работа|work|работать)$/i, async (ctx) => {
   const u = ecoUser(ctx);
@@ -345,28 +489,7 @@ bot.hears(/^(бонус|bonus)$/i, async (ctx) => {
   await ctx.reply(`🎁 Вы получили ваш ежедневный бонус: **+${reward.toLocaleString()} монет**!`);
 });
 
-// BANK SYSTEM
-bot.hears(/^(банк|bank) (положить|депозит) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const amount = Number(ctx.match[3]);
-  if (!amount || amount <= 0 || u.balance < amount) return ctx.reply("❌ Недостаточно наличных денег!");
-
-  u.balance -= amount;
-  u.bank += amount;
-  await ctx.reply(`🏦 Вы положили в банк **${amount.toLocaleString()} монет**.\n💳 В банке: **${u.bank.toLocaleString()}**`);
-});
-
-bot.hears(/^(банк|bank) (снять|вывести) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const amount = Number(ctx.match[3]);
-  if (!amount || amount <= 0 || u.bank < amount) return ctx.reply("❌ На вашем банковском счету нет такой суммы!");
-
-  u.bank -= amount;
-  u.balance += amount;
-  await ctx.reply(`🏦 Вы сняли со счета **${amount.toLocaleString()} монет**.\n💰 На руках: **${u.balance.toLocaleString()}**`);
-});
-
-// ==================== PIRAMIDA 2x2 (4 BUTTON GRID) ====================
+// ==================== PIRAMIDA & GAMES ====================
 
 bot.hears(/^(пирамида|pyramid) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
@@ -408,7 +531,7 @@ async function renderPyramid2x2(ctx, userId) {
     buttons.push([Markup.button.callback(`💰 Забрать выигрыш (${curWin.toLocaleString()})`, "pyr2_take")]);
   }
 
-  const text = `🔺 **ПИРАМИДА 2x2 (Уровень ${g.level}/5)**\n\n🎯 Множитель: **x${g.mults[g.level - 1]}**\n💵 Текущий выигрыш: **${curWin.toLocaleString()} монет**\n\n4 ячейки (2x2): 3 алмаза 💎 и 1 бомба 💣!\nВыберите безопасную ячейку:`;
+  const text = `🔺 **ПИРАМИДА 2x2 (Уровень ${g.level}/5)**\n\n🎯 Множитель: **x${g.mults[g.level - 1]}**\n💵 Текущий выигрыш: **${curWin.toLocaleString()} монет**\n\nВыберите безопасную ячейку:`;
 
   if (ctx.callbackQuery) await ctx.editMessageText(text, Markup.inlineKeyboard(buttons));
   else await ctx.reply(text, Markup.inlineKeyboard(buttons));
@@ -425,7 +548,7 @@ bot.action(/^pyr2_(\d+)$/, async (ctx) => {
     const u = ecoUser(ctx);
     u.losses += 1;
     activePyramidGames.delete(userId);
-    return ctx.editMessageText(`💥 **ВЗРЫВ!** Вы попали на бомбу и потеряли **-${g.bet.toLocaleString()} монет**.`);
+    return ctx.editMessageText(`💥 **ВЗРЫВ!** Вы попали на ловушку и потеряли **-${g.bet.toLocaleString()} монет**.`);
   }
 
   if (g.level >= 5) {
@@ -435,7 +558,7 @@ bot.action(/^pyr2_(\d+)$/, async (ctx) => {
     u.wins += 1;
     addExp(u, 50);
     activePyramidGames.delete(userId);
-    return ctx.editMessageText(`🏆 **ГРАНДИОЗНАЯ ПОБЕДА!** Вы прошли все 5 уровней 2x2 и выиграли **+${win.toLocaleString()} монет**!`);
+    return ctx.editMessageText(`🏆 **ГРАНДИОЗНАЯ ПОБЕДА!** Вы прошли все 5 уровней и выиграли **+${win.toLocaleString()} монет**!`);
   }
 
   g.level += 1;
@@ -454,56 +577,6 @@ bot.action("pyr2_take", async (ctx) => {
   u.wins += 1;
   activePyramidGames.delete(userId);
   await ctx.editMessageText(`🤑 **ВЫИГРЫШ ЗАБРАН!** Вы забрали **+${win.toLocaleString()} монет**!`);
-});
-
-// ==================== CRASH (70% LOSS RISK) ====================
-
-bot.hears(/^(краш|crash) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[2]);
-
-  if (!bet || bet < 100) return ctx.reply("❌ Минимальная ставка: 100!");
-  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
-
-  u.balance -= bet;
-
-  const isCrash = Math.random() < 0.70;
-  if (isCrash) {
-    u.losses += 1;
-    const crashPoint = (Math.random() * 0.9 + 1.0).toFixed(2);
-    return ctx.reply(`📈 **CRASH GAME**\n\n💥 Ракета взорвалась на **x${crashPoint}**!\n📉 Потеря: **-${bet.toLocaleString()} монет**.`);
-  } else {
-    u.wins += 1;
-    const winMult = (Math.random() * 3.0 + 1.3).toFixed(2);
-    const winAmount = Math.floor(bet * winMult);
-    u.balance += winAmount;
-    addExp(u, 25);
-    return ctx.reply(`📈 **CRASH GAME**\n\n🚀 Ракета взлетела до **x${winMult}**!\n🎉 Ваш выигрыш: **+${winAmount.toLocaleString()} монет**!`);
-  }
-});
-
-// TRADING
-bot.hears(/^(трейдинг|trade) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[2]);
-
-  if (!bet || bet < 100) return ctx.reply("❌ Минимальная ставка: 100!");
-  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
-
-  u.balance -= bet;
-
-  const isWin = Math.random() < 0.40;
-  if (isWin) {
-    u.wins += 1;
-    const mult = (Math.random() * 1.8 + 1.2).toFixed(2);
-    const winAmount = Math.floor(bet * mult);
-    u.balance += winAmount;
-    addExp(u, 20);
-    return ctx.reply(`📊 **БИРЖЕВОЙ ТРЕЙДИНГ**\n\n🟢 Курс пошел вверх (x${mult})!\n🎉 Зафиксирована прибыль: **+${winAmount.toLocaleString()} монет**.`);
-  } else {
-    u.losses += 1;
-    return ctx.reply(`📊 **БИРЖЕВОЙ ТРЕЙДИНГ**\n\n🔴 Сработал Стоп-Лосс! Курс упал.\n📉 Убыток: **-${bet.toLocaleString()} монет**.`);
-  }
 });
 
 // MINES 7x7
@@ -583,7 +656,7 @@ bot.action("mines_take", async (ctx) => {
 
 bot.action("mines_ignore", (ctx) => ctx.answerCbQuery());
 
-// ALL STANDARD GAMES ENGINE
+// STANDARD CASINO
 function playStandardGame(ctx, bet, winRate, winMult, title) {
   const u = ecoUser(ctx);
   if (!bet || bet <= 0 || u.balance < bet) return ctx.reply("❌ Недостаточно средств на балансе!");
@@ -601,6 +674,8 @@ function playStandardGame(ctx, bet, winRate, winMult, title) {
   }
 }
 
+bot.hears(/^(краш|crash) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.5, "🚀 **CRASH GAME**"));
+bot.hears(/^(трейдинг|trade) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.40, 1.8, "📊 **БИРЖЕВОЙ ТРЕЙДИНГ**"));
 bot.hears(/^(казино|casino) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎰 **КАЗИНО**"));
 bot.hears(/^(кубик|dice) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎲 **ИГРА В КОСТИ**"));
 bot.hears(/^(слоты|slots) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.25, 3.5, "🎰 **СЛОТ-МАШИНА**"));
@@ -615,6 +690,22 @@ bot.hears(/^(сейф|safe) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.ma
 bot.hears(/^(колесо|wheel) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.5, "🎡 **КОЛЕСО УДАЧИ**"));
 bot.hears(/^(дуэль|duel) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.40, 1.9, "⚔️ **ДУЭЛЬ**"));
 bot.hears(/^(скачки|race) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.25, 3.0, "🐎 **КОННЫЕ СКАЧКИ**"));
+
+// ==================== ADMIN COMMANDS ====================
+
+bot.hears(/^(выдать) (\d+) (\d+)$/i, async (ctx) => {
+  if (ctx.from.id !== ADMIN_ID) return;
+  const targetId = String(ctx.match[2]);
+  const amount = Number(ctx.match[3]);
+
+  if (economyUsers.has(targetId)) {
+    const u = economyUsers.get(targetId);
+    u.balance += amount;
+    await ctx.reply(`👑 **ADMIN:** Выдали **+${amount.toLocaleString()} монет** игроку **${ecoName(u)}**.`);
+  } else {
+    await ctx.reply("❌ Пользователь не найден!");
+  }
+});
 
 // ==================== PROFILE, TOP & MENU ====================
 
@@ -632,7 +723,7 @@ bot.hears(/^(богатые|топ|top)$/i, async (ctx) => {
 
 bot.hears(/^(баланс|balans)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  await ctx.reply(`💰 **ВАШИ ФИНАНСЫ:**\n\n💵 Наличными: **${u.balance.toLocaleString()} монет**\n🏦 В банке: **${u.bank.toLocaleString()} монет**`);
+  await ctx.reply(`💰 **ВАШИ ФИНАНСЫ:**\n\n💵 Наличными: **${u.balance.toLocaleString()} монет**\n🏦 В банке: **${u.bank.toLocaleString()} монет**\n💳 Кредит: **${u.credit.toLocaleString()} монет**`);
 });
 
 bot.hears(/^(профиль|проф|profile)$/i, async (ctx) => {
@@ -643,42 +734,36 @@ bot.hears(/^(профиль|проф|profile)$/i, async (ctx) => {
     `🆔 ID: \`${u.id}\`\n` +
     `⭐ Уровень: **${u.level} LVL** (${u.experience}/${u.level * 100} EXP)\n\n` +
     `💰 Наличные: **${u.balance.toLocaleString()} монет**\n` +
-    `🏦 Банк: **${u.bank.toLocaleString()} монет**\n\n` +
+    `🏦 Банк: **${u.bank.toLocaleString()} монет**\n` +
+    `💳 Кредит: **${u.credit.toLocaleString()} монет**\n\n` +
     `🚘 Авто: **${u.car}**\n` +
     `🏠 Дом: **${u.house}**\n` +
     `📱 Телефон: **${u.phone}**\n` +
     `🛥 Яхта: **${u.yacht}**\n` +
     `✈️ Самолет: **${u.plane}**\n` +
     `🏢 Бизнес: **${u.business}** (+${u.bizIncome.toLocaleString()}/час)\n\n` +
-    `📊 Статистика игр: 🟢 Побед: ${u.wins} | 🔴 Поражений: ${u.losses}`
+    `📊 Статистика: 🟢 Побед: ${u.wins} | 🔴 Поражений: ${u.losses}`
   );
 });
 
 bot.hears(/^(игры|меню|menu|start|старт)$/i, async (ctx) => {
   await ctx.reply(
     `📜 **ПОЛНОЕ МЕНЮ И КОМАНДЫ БОТА**\n\n` +
-    `🎮 **Мини-Игры:**\n` +
-    `• \`краш [ставка]\` | \`трейдинг [ставка]\`\n` +
-    `• \`пирамида [ставка]\` | \`мина [ставка]\` (7x7)\n` +
-    `• \`казино [ставка]\` | \`слоты [ставка]\`\n` +
-    `• \`кубик [ставка]\` | \`монетка [ставка]\`\n` +
-    `• \`рулетка красное/черное [ставка]\`\n` +
-    `• \`дартс [ставка]\` | \`баскетбол [ставка]\`\n` +
-    `• \`футбол [ставка]\` | \`покер [ставка]\`\n` +
-    `• \`блекджек [ставка]\` | \`сейф [ставка]\`\n` +
-    `• \`колесо [ставка]\` | \`дуэль [ставка]\` | \`скачки [ставка]\`\n\n` +
-    `💼 **Заработок и Кредиты:**\n` +
-    `• \`работа\` — Заработать деньги на работе\n` +
-    `• \`ограбление\` — Попробовать совершить дело\n` +
-    `• \`бонус\` — Ежедневный бонус\n` +
-    `• \`прибыль\` — Собрать прибыль с бизнеса\n\n` +
-    `🛒 **Рынки и Недвижимость:**\n` +
-    `• \`магазин\` — Посмотреть категории\n` +
-    `• \`автосалон\` / \`недвижимость\` / \`бизнесы\`\n` +
-    `• \`телефоны\` / \`яхты\` / \`авиасалон\`\n\n` +
-    `🏦 **Банк и Профиль:**\n` +
-    `• \`банк депозит [сумма]\` | \`банк снять [сумма]\`\n` +
-    `• \`баланс\` | \`профиль\` | \`богатые\``
+    `🏦 **Банк и Кредиты:**\n` +
+    `• \`банк\` — Главная страница банка\n` +
+    `• \`банк депозит [сумма]\` / \`банк снять [сумма]\`\n` +
+    `• \`кредит [сумма]\` — Взять денежный кредит\n` +
+    `• \`погасить [сумма]\` — Выплатить кредит\n\n` +
+    `🔄 **Переводы и Настройки:**\n` +
+    `• \`перевод [сумма]\` — Перевод ответом на сообщение (Reply)\n` +
+    `• \`перевод [ID] [сумма]\` — Перевести по ID\n` +
+    `• \`ник [имя]\` — Изменить свое имя в профиле\n\n` +
+    `🛒 **Супермаркет и Имущество:**\n` +
+    `• \`автосалон\` — Выбрать и купить машину\n` +
+    `• \`недвижимость\` | \`бизнесы\` | \`телефоны\`\n` +
+    `• \`прибыль\` — Собрать доход с бизнеса\n\n` +
+    `💼 **Заработок:** \`работа\` | \`ограбление\` | \`бонус\`\n\n` +
+    `📊 **Инфо:** \`баланс\` | \`профиль\` | \`богатые\``
   );
 });
 
@@ -686,7 +771,7 @@ async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🚀 BOT UPDATED WITH FLEXIBLE SHOP COMMAND HANDLERS!");
+    console.log("🚀 BOT UPDATED WITH EXPLICIT BUY COMMANDS!");
   } catch (err) {
     console.error("Start Error:", err);
   }
