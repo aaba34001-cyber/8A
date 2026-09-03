@@ -62,7 +62,7 @@ function addExp(u, amount) {
   }
 }
 
-// ==================== EXTENDED SHOP DATA (100% RUSSIAN) ====================
+// ==================== EXTENDED SHOP DATA ====================
 
 const CARS = [
   { name: "🚲 Велосипед", price: 5000 },
@@ -366,9 +366,8 @@ bot.hears(/^(банк|bank) (снять|вывести) (\d+)$/i, async (ctx) =>
   await ctx.reply(`🏦 Вы сняли со счета **${amount.toLocaleString()} монет**.\n💰 На руках: **${u.balance.toLocaleString()}**`);
 });
 
-// ==================== GAMES SYSTEM ====================
+// ==================== PIRAMIDA 2x2 (4 BUTTON GRID) ====================
 
-// PIRAMIDA 2x2
 bot.hears(/^(пирамида|pyramid) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const bet = Number(ctx.match[2]);
@@ -379,11 +378,12 @@ bot.hears(/^(пирамида|pyramid) (\d+)$/i, async (ctx) => {
   u.balance -= bet;
   const userId = ctx.from.id;
 
+  // 2x2 qatorda 4 ta tugma: 1 ta bomba (0-3 orasi)
   activePyramidGames.set(userId, {
     bet,
     level: 1,
-    mults: [1.8, 3.2, 6.0, 12.0],
-    trap: Math.floor(Math.random() * 2)
+    mults: [1.4, 2.0, 3.0, 5.0, 8.0],
+    trap: Math.floor(Math.random() * 4)
   });
 
   await renderPyramid2x2(ctx, userId);
@@ -393,17 +393,24 @@ async function renderPyramid2x2(ctx, userId) {
   const g = activePyramidGames.get(userId);
   if (!g) return;
 
-  const buttons = [[
-    Markup.button.callback("❓ Ячейка 1", "pyr2_0"),
-    Markup.button.callback("❓ Ячейка 2", "pyr2_1")
-  ]];
+  // 2x2 Tugmalar joylashuvi (2 ta qator, har birida 2 tadan)
+  const buttons = [
+    [
+      Markup.button.callback("❓ [1]", "pyr2_0"),
+      Markup.button.callback("❓ [2]", "pyr2_1")
+    ],
+    [
+      Markup.button.callback("❓ [3]", "pyr2_2"),
+      Markup.button.callback("❓ [4]", "pyr2_3")
+    ]
+  ];
 
   const curWin = Math.floor(g.bet * (g.level === 1 ? 1 : g.mults[g.level - 2]));
   if (g.level > 1) {
     buttons.push([Markup.button.callback(`💰 Забрать выигрыш (${curWin.toLocaleString()})`, "pyr2_take")]);
   }
 
-  const text = `🔺 **ПИРАМИДА 2x2 (Уровень ${g.level}/4)**\n\n🎯 Множитель: **x${g.mults[g.level - 1]}**\n💵 Текущий выигрыш: **${curWin.toLocaleString()} монет**\n\nВыберите безопасную ячейку:`;
+  const text = `🔺 **ПИРАМИДА 2x2 (Уровень ${g.level}/5)**\n\n🎯 Множитель: **x${g.mults[g.level - 1]}**\n💵 Текущий выигрыш: **${curWin.toLocaleString()} монет**\n\n4 ячейки (2x2): 3 алмаза 💎 и 1 бомба 💣!\nВыберите безопасную ячейку:`;
 
   if (ctx.callbackQuery) await ctx.editMessageText(text, Markup.inlineKeyboard(buttons));
   else await ctx.reply(text, Markup.inlineKeyboard(buttons));
@@ -420,21 +427,21 @@ bot.action(/^pyr2_(\d+)$/, async (ctx) => {
     const u = ecoUser(ctx);
     u.losses += 1;
     activePyramidGames.delete(userId);
-    return ctx.editMessageText(`💥 **ВЗРЫВ!** Вы попали в ловушку и потеряли **-${g.bet.toLocaleString()} монет**.`);
+    return ctx.editMessageText(`💥 **ВЗРЫВ!** Вы попали на бомбу и потеряли **-${g.bet.toLocaleString()} монет**.`);
   }
 
-  if (g.level >= 4) {
-    const win = Math.floor(g.bet * g.mults[3]);
+  if (g.level >= 5) {
+    const win = Math.floor(g.bet * g.mults[4]);
     const u = ecoUser(ctx);
     u.balance += win;
     u.wins += 1;
     addExp(u, 50);
     activePyramidGames.delete(userId);
-    return ctx.editMessageText(`🏆 **ГРАНДИОЗНАЯ ПОБЕДА!** Вы прошли пирамиду и выиграли **+${win.toLocaleString()} монет**!`);
+    return ctx.editMessageText(`🏆 **ГРАНДИОЗНАЯ ПОБЕДА!** Вы прошли все 5 уровней 2x2 и выиграли **+${win.toLocaleString()} монет**!`);
   }
 
   g.level += 1;
-  g.trap = Math.floor(Math.random() * 2);
+  g.trap = Math.floor(Math.random() * 4); // keyingi darajaga yangi bomba
   await renderPyramid2x2(ctx, userId);
 });
 
@@ -451,7 +458,8 @@ bot.action("pyr2_take", async (ctx) => {
   await ctx.editMessageText(`🤑 **ВЫИГРЫШ ЗАБРАН!** Вы забрали **+${win.toLocaleString()} монет**!`);
 });
 
-// CRASH (70% LOSS RISK)
+// ==================== CRASH (70% LOSS RISK) ====================
+
 bot.hears(/^(краш|crash) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const bet = Number(ctx.match[2]);
@@ -653,7 +661,7 @@ bot.hears(/^(игры|меню|menu|start|старт)$/i, async (ctx) => {
     `📜 **ПОЛНОЕ МЕНЮ И КОМАНДЫ БОТА**\n\n` +
     `🎮 **Мини-Игры:**\n` +
     `• \`краш [ставка]\` | \`трейдинг [ставка]\`\n` +
-    `• \`пирамида [ставка]\` | \`мина [ставка]\` (7x7)\n` +
+    `• \`пирамида [ставка]\` (2x2 grid) | \`мина [ставка]\` (7x7)\n` +
     `• \`казино [ставка]\` | \`слоты [ставка]\`\n` +
     `• \`кубик [ставка]\` | \`монетка [ставка]\`\n` +
     `• \`рулетка красное/черное [ставка]\`\n` +
@@ -680,7 +688,7 @@ async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🚀 BOT IS LIVE IN RUSSIAN LANGUAGE WITH MAXIMUM CODEBASE!");
+    console.log("🚀 BOT IS LIVE WITH REAL 2x2 PYRAMID GRID!");
   } catch (err) {
     console.error("Start Error:", err);
   }
