@@ -48,6 +48,7 @@ bot.use(async (ctx, next) => {
 });
 
 const SERVICE_7_DAYS = 7 * 24 * 60 * 60 * 1000;
+const SERVICE_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 
 function ecoUser(ctx) {
   const id = String(ctx.from.id);
@@ -57,16 +58,19 @@ function ecoUser(ctx) {
       id: ctx.from.id,
       name: ctx.from.first_name || "Пользователь",
       username: ctx.from.username || null,
-      balance: 5000,
+      balance: 10000,
       bank: 0,
       vip: false,
       vipExpires: 0,
       business: null,
       car: null,
       house: null,
+      jewelry: null,
       lastBonus: 0,
       lastWork: 0,
-      crypto: 0,
+      btc: 0,
+      eth: 0,
+      ton: 0,
       notif: true
     });
   }
@@ -84,168 +88,195 @@ function ecoName(u) {
   return `${nameStr}${isVipActive ? " 👑VIP" : ""}`;
 }
 
-// ==================== АДМИН ПАНЕЛЬ ====================
+// ==================== РАСШИРЕННЫЙ ДОНАТ (STARS) ====================
 
-bot.command(["kick", "кик"], async (ctx) => {
-  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Доступ запрещен!");
-  if (!ctx.message.reply_to_message) return ctx.reply("📌 Ответьте на сообщение пользователя!");
-  const target = ctx.message.reply_to_message.from;
-  if (isImmune(target.id, target.username)) return ctx.reply("🛡️ У этого пользователя иммунитет!");
-
-  await ctx.banChatMember(target.id);
-  await ctx.unbanChatMember(target.id);
-  await ctx.reply(`🚪 **${target.first_name}** был кикнут из группы.`);
-});
-
-bot.command(["ban", "бан"], async (ctx) => {
-  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Доступ запрещен!");
-  if (!ctx.message.reply_to_message) return ctx.reply("📌 Ответьте на сообщение пользователя!");
-  const target = ctx.message.reply_to_message.from;
-  if (isImmune(target.id, target.username)) return ctx.reply("🛡️ У этого пользователя иммунитет!");
-
-  await ctx.banChatMember(target.id);
-  await ctx.reply(`🚫 **${target.first_name}** забанен.`);
-});
-
-bot.command(["unban", "разбан"], async (ctx) => {
-  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Доступ запрещен!");
-  if (!ctx.message.reply_to_message) return ctx.reply("📌 Ответьте на сообщение пользователя!");
-  const target = ctx.message.reply_to_message.from;
-
-  await ctx.unbanChatMember(target.id);
-  await ctx.reply(`✅ **${target.first_name}** разбанен.`);
-});
-
-bot.command(["mute", "мут"], async (ctx) => {
-  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Доступ запрещен!");
-  if (!ctx.message.reply_to_message) return ctx.reply("📌 Ответьте на сообщение!");
-  const target = ctx.message.reply_to_message.from;
-  if (isImmune(target.id, target.username)) return ctx.reply("🛡️ У пользователя иммунитет!");
-
-  await ctx.restrictChatMember(target.id, { permissions: { can_send_messages: false }, until_date: Math.floor(Date.now() / 1000) + 3600 });
-  await ctx.reply(`🔇 **${target.first_name}** переведен в режим чтения на 1 час.`);
-});
-
-// ==================== МАГАЗИН И 7 КУНЛИК VIP ====================
-
-bot.hears(/^!?(магазин|shop|донат)$/i, async (ctx) => {
+bot.hears(/^!?(донат|donat|stars)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback("👑 VIP статус (7 дней) - 50,000 монет", "buy_vip_7")],
-    [Markup.button.callback("🏎️ Машина: BMW M5 CS - 100,000 монет", "buy_car")],
-    [Markup.button.callback("🏰 Вилла на Пхукете - 500,000 монет", "buy_house")],
-    [Markup.button.callback("💼 Бизнес: Нефтяная Вышка - 1,000,000 монет", "buy_biz")]
+    [Markup.button.callback("⭐ 50 Stars ➔ 🪙 5,000,000 монет", "buy_stars_50")],
+    [Markup.button.callback("⭐ 150 Stars ➔ 🪙 20,000,000 монет", "buy_stars_150")],
+    [Markup.button.callback("⭐ 500 Stars ➔ 🪙 100,000,000 монет", "buy_stars_500")],
+    [Markup.button.callback("👑 7 Дней VIP Status ➔ ⭐ 100 Stars", "buy_vip_stars_7")],
+    [Markup.button.callback("💎 30 Дней Premium Status ➔ ⭐ 250 Stars", "buy_vip_stars_30")]
   ]);
 
   await ctx.reply(
-    `🛒 **МАГАЗИН И УСЛУГИ**\n\n` +
-    `💰 Ваш баланс: 🪙 **${u.balance.toLocaleString()} монет**\n\n` +
-    `Выберите товар для покупки:`,
+    `⭐ **ДОНАТ И ПОКУПКА STARS** ⭐\n\n` +
+    `Поддержите развитие проекта и получите эксклюзивные бонусы!\n\n` +
+    `💰 Ваш текущий баланс: 🪙 **${u.balance.toLocaleString()} монет**\n\n` +
+    `Выберите подходящий пакет:`,
     keyboard
   );
 });
 
-bot.action("buy_vip_7", async (ctx) => {
+// ==================== РАСШИРЕННЫЙ МАГАЗИН ====================
+
+bot.hears(/^!?(магазин|shop)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  if (u.balance < 50000) return ctx.answerCbQuery("❌ Недостаточно средств! Нужно 50,000 монет.", { show_alert: true });
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("👑 VIP на 7 дней - 100,000 монет", "shop_vip_7")],
+    [Markup.button.callback("🏎️ Автосалон (Машины)", "cat_cars")],
+    [Markup.button.callback("🏰 Недвижимость (Дома)", "cat_houses")],
+    [Markup.button.callback("💼 Бизнесы и Предприятия", "cat_biz")],
+    [Markup.button.callback("💎 Украшения и Аксессуары", "cat_jewelry")]
+  ]);
 
-  u.balance -= 50000;
-  u.vip = true;
-  u.vipExpires = Date.now() + SERVICE_7_DAYS;
-
-  await ctx.editMessageText(`🎉 **ПОЗДРАВЛЯЕМ!**\nВы успешно приобрели 👑 **VIP статус на 7 дней**!\n\n💰 Остаток: ${u.balance.toLocaleString()} монет`);
+  await ctx.reply(
+    `🛍️ **ГЛАВНЫЙ МАГАЗИН**\n\n` +
+    `💰 Баланс: 🪙 **${u.balance.toLocaleString()} монет**\n\n` +
+    `Выберите категорию товаров:`,
+    keyboard
+  );
 });
 
-bot.action("buy_car", async (ctx) => {
+bot.action("cat_cars", async (ctx) => {
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("🚗 BMW M5 F90 - 250,000", "buy_car_bmw")],
+    [Markup.button.callback("🏎️ Porsche 911 GT3 - 750,000", "buy_car_porsche")],
+    [Markup.button.callback("🏎️ Bugatti Chiron - 3,000,000", "buy_car_bugatti")],
+    [Markup.button.callback("⬅️ Назад", "back_shop")]
+  ]);
+  await ctx.editMessageText("🏎️ **АВТОСАЛОН**\nВыберите автомобиль:", keyboard);
+});
+
+bot.action("cat_houses", async (ctx) => {
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("🏢 Квартира в Сити - 500,000", "buy_h_apt")],
+    [Markup.button.callback("🏡 Загородный Пентхаус - 2,000,000", "buy_h_pent")],
+    [Markup.button.callback("🏰 Вилла на Бали - 10,000,000", "buy_h_villa")],
+    [Markup.button.callback("⬅️ Назад", "back_shop")]
+  ]);
+  await ctx.editMessageText("🏰 **НЕДВИЖИМОСТЬ**\nВыберите элитный дом:", keyboard);
+});
+
+bot.action("cat_biz", async (ctx) => {
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("☕ Сеть Кофейн - 1,500,000", "buy_b_coffee")],
+    [Markup.button.callback("🛢️ Нефтяная Вышка - 15,000,000", "buy_b_oil")],
+    [Markup.button.callback("🚀 Космическая Компания - 100,000,000", "buy_b_space")],
+    [Markup.button.callback("⬅️ Назад", "back_shop")]
+  ]);
+  await ctx.editMessageText("💼 **БИЗНЕСЫ**\nВыберите предприятие:", keyboard);
+});
+
+bot.action("cat_jewelry", async (ctx) => {
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("⌚ Часы Rolex Daytona - 300,000", "buy_j_rolex")],
+    [Markup.button.callback("💍 Бриллиантовое Кольцо - 800,000", "buy_j_ring")],
+    [Markup.button.callback("👑 Золотая Корона - 5,000,000", "buy_j_crown")],
+    [Markup.button.callback("⬅️ Назад", "back_shop")]
+  ]);
+  await ctx.editMessageText("💎 **ЮВЕЛИРНЫЙ МАГАЗИН**\nВыберите украшение:", keyboard);
+});
+
+bot.action("back_shop", async (ctx) => {
+  const u = ecoUser(ctx);
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("👑 VIP на 7 дней - 100,000 монет", "shop_vip_7")],
+    [Markup.button.callback("🏎️ Автосалон (Машины)", "cat_cars")],
+    [Markup.button.callback("🏰 Недвижимость (Дома)", "cat_houses")],
+    [Markup.button.callback("💼 Бизнесы и Предприятия", "cat_biz")],
+    [Markup.button.callback("💎 Украшения и Аксессуары", "cat_jewelry")]
+  ]);
+  await ctx.editMessageText(`🛍️ **ГЛАВНЫЙ МАГАЗИН**\n\n💰 Баланс: 🪙 **${u.balance.toLocaleString()} монет**`, keyboard);
+});
+
+// Shop Xarid qilish logikasi
+function processBuy(ctx, price, field, itemName) {
+  const u = ecoUser(ctx);
+  if (u.balance < price) {
+    return ctx.answerCbQuery(`❌ Недостаточно средств! Нужно 🪙 ${price.toLocaleString()}`, { show_alert: true });
+  }
+  u.balance -= price;
+  u[field] = itemName;
+  return ctx.editMessageText(`✅ Вы успешно купили **${itemName}** за 🪙 ${price.toLocaleString()} монет!`);
+}
+
+bot.action("shop_vip_7", (ctx) => {
   const u = ecoUser(ctx);
   if (u.balance < 100000) return ctx.answerCbQuery("❌ Недостаточно средств!", { show_alert: true });
   u.balance -= 100000;
-  u.car = "BMW M5 CS";
-  await ctx.editMessageText(`🏎️ Вы успешно купили **BMW M5 CS**!`);
+  u.vip = true;
+  u.vipExpires = Date.now() + SERVICE_7_DAYS;
+  ctx.editMessageText("🎉 Вы успешно купили 👑 **VIP статус на 7 дней**!");
 });
 
-bot.action("buy_house", async (ctx) => {
+bot.action("buy_car_bmw", (ctx) => processBuy(ctx, 250000, "car", "BMW M5 F90"));
+bot.action("buy_car_porsche", (ctx) => processBuy(ctx, 750000, "car", "Porsche 911 GT3"));
+bot.action("buy_car_bugatti", (ctx) => processBuy(ctx, 3000000, "car", "Bugatti Chiron"));
+
+bot.action("buy_h_apt", (ctx) => processBuy(ctx, 500000, "house", "Квартира в Сити"));
+bot.action("buy_h_pent", (ctx) => processBuy(ctx, 2000000, "house", "Загородный Пентхаус"));
+bot.action("buy_h_villa", (ctx) => processBuy(ctx, 10000000, "house", "Вилла на Бали"));
+
+bot.action("buy_b_coffee", (ctx) => processBuy(ctx, 1500000, "business", "Сеть Кофейн"));
+bot.action("buy_b_oil", (ctx) => processBuy(ctx, 15000000, "business", "Нефтяная Вышка"));
+bot.action("buy_b_space", (ctx) => processBuy(ctx, 100000000, "business", "Космическая Компания"));
+
+bot.action("buy_j_rolex", (ctx) => processBuy(ctx, 300000, "jewelry", "Rolex Daytona"));
+bot.action("buy_j_ring", (ctx) => processBuy(ctx, 800000, "jewelry", "Бриллиантовое Кольцо"));
+bot.action("buy_j_crown", (ctx) => processBuy(ctx, 5000000, "jewelry", "Золотая Корона"));
+
+// ==================== МНОГОФУНКЦИОНАЛЬНЫЙ ТРЕЙДИНГ ====================
+
+const CRYPTO_RATES = {
+  btc: 50000,
+  eth: 3000,
+  ton: 500
+};
+
+bot.hears(/^!?(трейдинг|birja|биржа|крипта)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  if (u.balance < 500000) return ctx.answerCbQuery("❌ Недостаточно средств!", { show_alert: true });
-  u.balance -= 500000;
-  u.house = "Вилла на Пхукете";
-  await ctx.editMessageText(`🏰 Вы успешно купили **Виллу на Пхукете**!`);
-});
-
-bot.action("buy_biz", async (ctx) => {
-  const u = ecoUser(ctx);
-  if (u.balance < 1000000) return ctx.answerCbQuery("❌ Недостаточно средств!", { show_alert: true });
-  u.balance -= 1000000;
-  u.business = "Нефтяная Вышка";
-  await ctx.editMessageText(`💼 Вы успешно купили **Бизнес: Нефтяная Вышка**!`);
-});
-
-// ==================== СОЗЛАМАЛАР (SETTINGS) ====================
-
-bot.hears(/^!?(настройки|settings|созламалар)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const status = u.notif ? "🔔 Включены" : "🔕 Выключены";
-  const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback(`Уведомления: ${status}`, "toggle_notif")],
-    [Markup.button.callback("📜 Инструкция / Обучение", "show_help")]
-  ]);
-
   await ctx.reply(
-    `⚙️ **НАСТРОЙКИ ПРОФИЛЯ**\n\n` +
-    `👤 Пользователь: ${ecoName(u)}\n` +
-    `🆔 ID: \`${u.id}\`\n` +
-    `🔔 Уведомления: **${status}**\n\n` +
-    `Выберите нужную опцию:`,
-    keyboard
+    `📈 **КРИПТО-БИРЖА И ТРЕЙДИНГ**\n\n` +
+    `📊 **Актуальные курсы:**\n` +
+    `• 🟠 BTC: **${CRYPTO_RATES.btc.toLocaleString()} монет**\n` +
+    `• 🔷 ETH: **${CRYPTO_RATES.eth.toLocaleString()} монет**\n` +
+    `• 💎 TON: **${CRYPTO_RATES.ton.toLocaleString()} монет**\n\n` +
+    `💼 **Ваш портфель:**\n` +
+    `• BTC: ${u.btc} | ETH: ${u.eth} | TON: ${u.ton}\n` +
+    `💰 Баланс: 🪙 **${u.balance.toLocaleString()} монет**\n\n` +
+    `📝 **Команды для торговли:**\n` +
+    `• \`Купить бтц [кол-во]\` | \`Продать бтц [кол-во]\` \n` +
+    `• \`Купить этх [кол-во]\` | \`Продать этх [кол-во]\` \n` +
+    `• \`Купить тон [кол-во]\` | \`Продать тон [кол-во]\``
   );
 });
 
-bot.action("toggle_notif", async (ctx) => {
+// Трейдинг buy/sell buyruqlari
+bot.hears(/^!(купить|buy) (бтц|btc|этх|eth|тон|ton) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  u.notif = !u.notif;
-  const status = u.notif ? "🔔 Включены" : "🔕 Выключены";
-  await ctx.answerCbQuery(`Уведомления: ${status}`);
-  await ctx.editMessageReplyMarkup(Markup.inlineKeyboard([
-    [Markup.button.callback(`Уведомления: ${status}`, "toggle_notif")],
-    [Markup.button.callback("📜 Инструкция / Обучение", "show_help")]
-  ]).reply_markup);
+  const coin = ctx.match[2].toLowerCase();
+  const amount = Number(ctx.match[3]);
+  let key = "btc";
+  if (coin === "этх" || coin === "eth") key = "eth";
+  if (coin === "тон" || coin === "ton") key = "ton";
+
+  const cost = amount * CRYPTO_RATES[key];
+  if (u.balance < cost) return ctx.reply(`❌ Недостаточно средств! Нужно 🪙 ${cost.toLocaleString()} монет.`);
+
+  u.balance -= cost;
+  u[key] += amount;
+  await ctx.reply(`✅ Вы успешно купили **${amount} ${key.toUpperCase()}** за 🪙 ${cost.toLocaleString()} монет!`);
 });
 
-bot.action("show_help", async (ctx) => {
-  await ctx.reply(
-    `📖 **ОБУЧЕНИЕ И ИНСТРУКЦИЯ**\n\n` +
-    `1. **Заработок:** Используйте команды \`Бонус\` (раз в 24 часа) и \`Работа\` (раз в час).\n` +
-    `2. **Трейдинг:** Покупайте BTC дешевле через \`Купить бтц\` и продавайте через \`Продать бтц\`.\n` +
-    `3. **Магазин:** Введите \`Магазин\` для покупки VIP статуса на 7 дней, машин и домов.\n` +
-    `4. **Игры:** Пишите \`Игры\` для вывода 21 уникальных мини-игр.`
-  );
-});
-
-// ==================== ИГРЫ И ЭКОНОМИКА ====================
-
-bot.hears(/^!?(бонус|bonus)$/i, async (ctx) => {
+bot.hears(/^!(продать|sell) (бтц|btc|этх|eth|тон|ton) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  const now = Date.now();
-  if (now - u.lastBonus < 86400000) {
-    return ctx.reply("⏳ Вы уже получали бонус! Возвращайтесь через 24 часа.");
-  }
-  const reward = u.vip ? 15000 : 5000;
-  u.balance += reward;
-  u.lastBonus = now;
-  await ctx.reply(`🎁 Вы получили ежедневный бонус: +🪙 **${reward.toLocaleString()} монет**!\n💰 Баланс: ${u.balance.toLocaleString()}`);
+  const coin = ctx.match[2].toLowerCase();
+  const amount = Number(ctx.match[3]);
+  let key = "btc";
+  if (coin === "этх" || coin === "eth") key = "eth";
+  if (coin === "тон" || coin === "ton") key = "ton";
+
+  if (u[key] < amount) return ctx.reply(`❌ У вас нет **${amount} ${key.toUpperCase()}**!`);
+
+  const gain = amount * CRYPTO_RATES[key];
+  u[key] -= amount;
+  u.balance += gain;
+  await ctx.reply(`✅ Вы успешно продали **${amount} ${key.toUpperCase()}** и получили +🪙 ${gain.toLocaleString()} монет!`);
 });
 
-bot.hears(/^!?(работа|rabota)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const now = Date.now();
-  if (now - u.lastWork < 3600000) {
-    return ctx.reply("⏳ Отдохните! Работать можно раз в час.");
-  }
-  const earned = Math.floor(Math.random() * 4000) + 1000;
-  u.balance += earned;
-  u.lastWork = now;
-  await ctx.reply(`💼 Вы успешно поработали и заработали: +🪙 **${earned.toLocaleString()} монет**!`);
-});
+// ==================== ОБЩИЕ КОМАНДЫ И ИГРЫ ====================
 
 bot.hears(/^!?(профиль|profile|баланс)$/i, async (ctx) => {
   const u = ecoUser(ctx);
@@ -254,55 +285,26 @@ bot.hears(/^!?(профиль|profile|баланс)$/i, async (ctx) => {
     `Имя: ${ecoName(u)}\n` +
     `🆔 ID: \`${u.id}\`\n` +
     `🪙 Кошелек: ${u.balance.toLocaleString()} монет\n` +
-    `🏦 Банк: ${u.bank.toLocaleString()} монет\n` +
-    `📊 Крипта: ${u.crypto} BTC\n\n` +
-    `🏎️ Авто: ${u.car || "Нет"}\n` +
-    `🏰 Дом: ${u.house || "Нет"}\n` +
-    `💼 Бизнес: ${u.business || "Нет"}`
+    `🏦 Банк: ${u.bank.toLocaleString()} монет\n\n` +
+    `💼 Криптопортфель: BTC: ${u.btc} | ETH: ${u.eth} | TON: ${u.ton}\n\n` +
+    `🏎️ Авто: ${u.car || "Отсутствует"}\n` +
+    `🏰 Дом: ${u.house || "Отсутствует"}\n` +
+    `💼 Бизнес: ${u.business || "Отсутствует"}\n` +
+    `💎 Украшение: ${u.jewelry || "Отсутствует"}`
   );
 });
 
-// 21 ТА ИГРА
-bot.hears(/^!?(игры|igri)$/i, async (ctx) => {
-  await ctx.reply(
-    `🎮 **СПИСОК 21 МИНИ-ИГР:**\n\n` +
-    `1. \`Мина [ставка]\` - Игра Мина (5x5)\n` +
-    `2. \`Пирамида [ставка]\` - Строительство пирамиды\n` +
-    `3. \`Бомба [ставка]\` - Разминирование\n` +
-    `4. \`Кость [ставка]\` - Игровой кубик\n` +
-    `5. \`Дартс [ставка]\` - Бросок в мишень\n` +
-    `6. \`Баскетбол [ставка]\` - Бросок в корзину\n` +
-    `7. \`Футбол [ставка]\` - Пенальти\n` +
-    `8. \`Казино [ставка]\` - Рулетка\n` +
-    `9. \`Орел [ставка]\` - Монетка Орел\n` +
-    `10. \`Решка [ставка]\` - Монетка Решка\n` +
-    `11. \`Дуэль [ставка]\` - Перестрелка\n` +
-    `12. \`Угадай [1-5] [ставка]\` - Угадай число\n` +
-    `13. \`Сейф [ставка]\` - Взлом сейфа\n` +
-    `14. \`Сундук [ставка]\` - Открыть сундук\n` +
-    `15. \`Колесо [ставка]\` - Колесо фортуны\n` +
-    `16. \`Лотерея [ставка]\` - Купон\n` +
-    `17. \`Тир [ставка]\` - Стрельба\n` +
-    `18. \`Скачки [ставка]\` - Скачки лошадей\n` +
-    `19. \`Крипто [ставка]\` - Ставка на курс\n` +
-    `20. \`Блекджек [ставка]\` - Картeжная игра\n` +
-    `21. \`Кости2 [ставка]\` - Кости с ботом`
-  );
-});
-
-// START
 bot.command("start", async (ctx) => {
   const u = ecoUser(ctx);
   await ctx.reply(
     `👋 **Приветствуем, ${u.name}!**\n\n` +
-    `🤖 **8-A ADMIN & GAME BOT**\n\n` +
-    `📌 **Основные команды:**\n` +
-    `• \`Профиль\` / \`Баланс\` — Личный кабинет\n` +
-    `• \`Магазин\` — Покупка VIP (7 дней), машин, домов\n` +
-    `• \`Настройки\` — Настройки профиля и обучение\n` +
-    `• \`Бонус\` — Ежедневная награда\n` +
-    `• \`Работа\` — Заработать монеты\n` +
-    `• \`Игры\` — Список 21 игр`,
+    `🤖 **8-A ADMIN & MULTI-GAME BOT**\n\n` +
+    `📌 **Основные модули:**\n` +
+    `• \`Профиль\` — Личный кабинет и имущество\n` +
+    `• \`Магазин\` — Авто, Недвижимость, Бизнесы и Аксессуары\n` +
+    `• \`Донат\` — Покупка VIP и монет за Telegram Stars\n` +
+    `• \`Трейдинг\` — Крипто-биржа (BTC, ETH, TON)\n` +
+    `• \`Игры\` — Список 21 мини-игр`,
     Markup.removeKeyboard()
   );
 });
@@ -311,7 +313,7 @@ async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🔥 Бот успешно запущен и обновлен!");
+    console.log("🔥 Бот с новым магазином и трейдингом запущен!");
   } catch (err) {
     console.error(" Ошибка бота:", err);
   }
