@@ -134,17 +134,17 @@ bot.hears(/^(магазин|magazin|shop)$/i, async (ctx) => {
   await ctx.reply(
     `🛒 **ГЛАВНЫЙ СУПЕРМАРКЕТ И БИРЖА**\n\n` +
     `Выберите нужную категорию:\n\n` +
-    `🚘 **Автосалон:** \`магазин машины\`\n` +
-    `🏠 **Недвижимость:** \`магазин дома\`\n` +
-    `📱 **Электроника:** \`магазин телефоны\`\n` +
-    `🏢 **Бизнес-Центр:** \`магазин бизнес\`\n` +
-    `🛥 **Яхты:** \`магазин яхты\`\n` +
-    `✈️ **Самолеты:** \`магазин самолеты\`\n\n` +
+    `🚘 **Автосалон:** \`магазин машины\` или \`автосалон\`\n` +
+    `🏠 **Недвижимость:** \`магазин дома\` или \`недвижимость\`\n` +
+    `📱 **Электроника:** \`магазин телефоны\` или \`телефоны\`\n` +
+    `🏢 **Бизнес-Центр:** \`магазин бизнес\` или \`бизнесы\`\n` +
+    `🛥 **Яхты:** \`магазин яхты\` или \`яхты\`\n` +
+    `✈️ **Авиасалон:** \`магазин самолеты\` или \`авиасалон\`\n\n` +
     `💡 *Чтобы купить, используйте команду с номером товара.*`
   );
 });
 
-bot.hears(/^(магазин|magazin) (машины|авто|mashina)$/i, async (ctx) => {
+bot.hears(/^((магазин|magazin) (машины|авто|mashina)|автосалон)$/i, async (ctx) => {
   let text = `🚘 **АВТОСАЛОН (МАШИНЫ)**\n\n`;
   CARS.forEach((c, i) => {
     text += `${i + 1}. **${c.name}** — ${c.price.toLocaleString()} монет (Купить: \`купить машину ${i + 1}\`)\n`;
@@ -152,7 +152,7 @@ bot.hears(/^(магазин|magazin) (машины|авто|mashina)$/i, async (
   await ctx.reply(text);
 });
 
-bot.hears(/^(магазин|magazin) (дома|дом|dom)$/i, async (ctx) => {
+bot.hears(/^((магазин|magazin) (дома|дом|dom)|недвижимость)$/i, async (ctx) => {
   let text = `🏠 **РЫНОК НЕДВИЖИМОСТИ**\n\n`;
   HOUSES.forEach((h, i) => {
     text += `${i + 1}. **${h.name}** — ${h.price.toLocaleString()} монет (Купить: \`купить дом ${i + 1}\`)\n`;
@@ -160,7 +160,7 @@ bot.hears(/^(магазин|magazin) (дома|дом|dom)$/i, async (ctx) => {
   await ctx.reply(text);
 });
 
-bot.hears(/^(магазин|magazin) (телефоны|телефон)$/i, async (ctx) => {
+bot.hears(/^((магазин|magazin) (телефоны|телефон)|телефоны)$/i, async (ctx) => {
   let text = `📱 **МАГАЗИН ЭЛЕКТРОНИКИ**\n\n`;
   PHONES.forEach((p, i) => {
     text += `${i + 1}. **${p.name}** — ${p.price.toLocaleString()} монет (Купить: \`купить телефон ${i + 1}\`)\n`;
@@ -168,7 +168,7 @@ bot.hears(/^(магазин|magazin) (телефоны|телефон)$/i, async
   await ctx.reply(text);
 });
 
-bot.hears(/^(магазин|magazin) (бизнес|бизнесы)$/i, async (ctx) => {
+bot.hears(/^((магазин|magazin) (бизнес|бизнесы)|бизнесы|бизнес)$/i, async (ctx) => {
   let text = `🏢 **БИРЖА ГОТОВОГО БИЗНЕСА**\n\n`;
   BIZ.forEach((b, i) => {
     text += `${i + 1}. **${b.name}**\n   💰 Цена: **${b.price.toLocaleString()}** | 📈 Доход: **+${b.income.toLocaleString()}/час**\n   🛒 Купить: \`купить бизнес ${i + 1}\`\n\n`;
@@ -176,7 +176,7 @@ bot.hears(/^(магазин|magazin) (бизнес|бизнесы)$/i, async (ct
   await ctx.reply(text);
 });
 
-bot.hears(/^(магазин|magazin) (яхты|яхта)$/i, async (ctx) => {
+bot.hears(/^((магазин|magazin) (яхты|яхта)|яхты)$/i, async (ctx) => {
   let text = `🛥 **ЯХТ-КЛУБ**\n\n`;
   YACHTS.forEach((y, i) => {
     text += `${i + 1}. **${y.name}** — ${y.price.toLocaleString()} монет (Купить: \`купить яхту ${i + 1}\`)\n`;
@@ -184,7 +184,7 @@ bot.hears(/^(магазин|magazin) (яхты|яхта)$/i, async (ctx) => {
   await ctx.reply(text);
 });
 
-bot.hears(/^(магазин|magazin) (самолеты|самолет)$/i, async (ctx) => {
+bot.hears(/^((магазин|magazin) (самолеты|самолет)|авиасалон|самолеты)$/i, async (ctx) => {
   let text = `✈️ **АВИАСАЛОН**\n\n`;
   PLANES.forEach((p, i) => {
     text += `${i + 1}. **${p.name}** — ${p.price.toLocaleString()} монет (Купить: \`купить самолет ${i + 1}\`)\n`;
@@ -378,7 +378,6 @@ bot.hears(/^(пирамида|pyramid) (\d+)$/i, async (ctx) => {
   u.balance -= bet;
   const userId = ctx.from.id;
 
-  // 2x2 qatorda 4 ta tugma: 1 ta bomba (0-3 orasi)
   activePyramidGames.set(userId, {
     bet,
     level: 1,
@@ -393,7 +392,6 @@ async function renderPyramid2x2(ctx, userId) {
   const g = activePyramidGames.get(userId);
   if (!g) return;
 
-  // 2x2 Tugmalar joylashuvi (2 ta qator, har birida 2 tadan)
   const buttons = [
     [
       Markup.button.callback("❓ [1]", "pyr2_0"),
@@ -441,7 +439,7 @@ bot.action(/^pyr2_(\d+)$/, async (ctx) => {
   }
 
   g.level += 1;
-  g.trap = Math.floor(Math.random() * 4); // keyingi darajaga yangi bomba
+  g.trap = Math.floor(Math.random() * 4);
   await renderPyramid2x2(ctx, userId);
 });
 
@@ -661,7 +659,7 @@ bot.hears(/^(игры|меню|menu|start|старт)$/i, async (ctx) => {
     `📜 **ПОЛНОЕ МЕНЮ И КОМАНДЫ БОТА**\n\n` +
     `🎮 **Мини-Игры:**\n` +
     `• \`краш [ставка]\` | \`трейдинг [ставка]\`\n` +
-    `• \`пирамида [ставка]\` (2x2 grid) | \`мина [ставка]\` (7x7)\n` +
+    `• \`пирамида [ставка]\` | \`мина [ставка]\` (7x7)\n` +
     `• \`казино [ставка]\` | \`слоты [ставка]\`\n` +
     `• \`кубик [ставка]\` | \`монетка [ставка]\`\n` +
     `• \`рулетка красное/черное [ставка]\`\n` +
@@ -676,8 +674,8 @@ bot.hears(/^(игры|меню|menu|start|старт)$/i, async (ctx) => {
     `• \`прибыль\` — Собрать прибыль с бизнеса\n\n` +
     `🛒 **Рынки и Недвижимость:**\n` +
     `• \`магазин\` — Посмотреть категории\n` +
-    `• \`магазин машины\` / \`магазин дома\` / \`магазин бизнес\`\n` +
-    `• \`магазин телефоны\` / \`магазин яхты\` / \`магазин самолеты\`\n\n` +
+    `• \`автосалон\` / \`недвижимость\` / \`бизнесы\`\n` +
+    `• \`телефоны\` / \`яхты\` / \`авиасалон\`\n\n` +
     `🏦 **Банк и Профиль:**\n` +
     `• \`банк депозит [сумма]\` | \`банк снять [сумма]\`\n` +
     `• \`баланс\` | \`профиль\` | \`богатые\``
@@ -688,7 +686,7 @@ async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🚀 BOT IS LIVE WITH REAL 2x2 PYRAMID GRID!");
+    console.log("🚀 BOT UPDATED WITH FLEXIBLE SHOP COMMAND HANDLERS!");
   } catch (err) {
     console.error("Start Error:", err);
   }
