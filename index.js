@@ -34,261 +34,276 @@ function isImmune(userId, username) {
 
 const economyUsers = new Map();
 const userLastMessage = new Map();
-const activeMines = new Map();
 
-// Anti-Spam Middleware
+// Anti-Spam
 bot.use(async (ctx, next) => {
   if (!ctx.from) return next();
   const userId = ctx.from.id;
   const now = Date.now();
-  if (userLastMessage.has(userId) && (now - userLastMessage.get(userId) < 1500)) {
+  if (userLastMessage.has(userId) && (now - userLastMessage.get(userId) < 1200)) {
     return;
   }
   userLastMessage.set(userId, now);
   return next();
 });
 
+const SERVICE_7_DAYS = 7 * 24 * 60 * 60 * 1000;
+
 function ecoUser(ctx) {
   const id = String(ctx.from.id);
+  const now = Date.now();
   if (!economyUsers.has(id)) {
     economyUsers.set(id, {
       id: ctx.from.id,
-      name: ctx.from.first_name || "User",
+      name: ctx.from.first_name || "Пользователь",
       username: ctx.from.username || null,
-      balance: 1000,
+      balance: 5000,
       bank: 0,
       vip: false,
+      vipExpires: 0,
+      business: null,
+      car: null,
+      house: null,
       lastBonus: 0,
       lastWork: 0,
-      crypto: 0
+      crypto: 0,
+      notif: true
     });
   }
   const u = economyUsers.get(id);
   if (ctx.from.username && EXTRA_ADMINS.includes(ctx.from.username.toLowerCase())) {
     u.vip = true;
+    u.vipExpires = now + SERVICE_7_DAYS * 10;
   }
   return u;
 }
 
 function ecoName(u) {
   const nameStr = u.username ? `@${u.username}` : u.name;
-  return `${nameStr}${u.vip ? " 👑VIP" : ""}`;
+  const isVipActive = u.vip && (u.vipExpires === 0 || Date.now() < u.vipExpires);
+  return `${nameStr}${isVipActive ? " 👑VIP" : ""}`;
 }
 
-// ==================== ADMIN PANEL & COMMANDS ====================
+// ==================== АДМИН ПАНЕЛЬ ====================
 
 bot.command(["kick", "кик"], async (ctx) => {
-  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Admin emassiz!");
-  if (!ctx.message.reply_to_message) return ctx.reply("📌 Kimgadir reply qiling!");
+  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Доступ запрещен!");
+  if (!ctx.message.reply_to_message) return ctx.reply("📌 Ответьте на сообщение пользователя!");
   const target = ctx.message.reply_to_message.from;
-  if (isImmune(target.id, target.username)) return ctx.reply("🛡️ Bu odamga daxlsizlik bor!");
-  
+  if (isImmune(target.id, target.username)) return ctx.reply("🛡️ У этого пользователя иммунитет!");
+
   await ctx.banChatMember(target.id);
   await ctx.unbanChatMember(target.id);
-  await ctx.reply(`🚪 ${target.first_name} guruhdan chiqarildi.`);
+  await ctx.reply(`🚪 **${target.first_name}** был кикнут из группы.`);
 });
 
 bot.command(["ban", "бан"], async (ctx) => {
-  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Admin emassiz!");
-  if (!ctx.message.reply_to_message) return ctx.reply("📌 Kimgadir reply qiling!");
+  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Доступ запрещен!");
+  if (!ctx.message.reply_to_message) return ctx.reply("📌 Ответьте на сообщение пользователя!");
   const target = ctx.message.reply_to_message.from;
-  if (isImmune(target.id, target.username)) return ctx.reply("🛡️ Bu odamga daxlsizlik bor!");
+  if (isImmune(target.id, target.username)) return ctx.reply("🛡️ У этого пользователя иммунитет!");
 
   await ctx.banChatMember(target.id);
-  await ctx.reply(`🚫 ${target.first_name} ban qilindi.`);
+  await ctx.reply(`🚫 **${target.first_name}** забанен.`);
 });
 
 bot.command(["unban", "разбан"], async (ctx) => {
-  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Admin emassiz!");
-  if (!ctx.message.reply_to_message) return ctx.reply("📌 Kimgadir reply qiling!");
+  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Доступ запрещен!");
+  if (!ctx.message.reply_to_message) return ctx.reply("📌 Ответьте на сообщение пользователя!");
   const target = ctx.message.reply_to_message.from;
+
   await ctx.unbanChatMember(target.id);
-  await ctx.reply(`✅ ${target.first_name} bandan chiqarildi.`);
+  await ctx.reply(`✅ **${target.first_name}** разбанен.`);
 });
 
-// ==================== ECONOMY & TRADING ====================
+bot.command(["mute", "мут"], async (ctx) => {
+  if (!(await isAdmin(ctx))) return ctx.reply("⛔ Доступ запрещен!");
+  if (!ctx.message.reply_to_message) return ctx.reply("📌 Ответьте на сообщение!");
+  const target = ctx.message.reply_to_message.from;
+  if (isImmune(target.id, target.username)) return ctx.reply("🛡️ У пользователя иммунитет!");
+
+  await ctx.restrictChatMember(target.id, { permissions: { can_send_messages: false }, until_date: Math.floor(Date.now() / 1000) + 3600 });
+  await ctx.reply(`🔇 **${target.first_name}** переведен в режим чтения на 1 час.`);
+});
+
+// ==================== МАГАЗИН И 7 КУНЛИК VIP ====================
+
+bot.hears(/^!?(магазин|shop|донат)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("👑 VIP статус (7 дней) - 50,000 монет", "buy_vip_7")],
+    [Markup.button.callback("🏎️ Машина: BMW M5 CS - 100,000 монет", "buy_car")],
+    [Markup.button.callback("🏰 Вилла на Пхукете - 500,000 монет", "buy_house")],
+    [Markup.button.callback("💼 Бизнес: Нефтяная Вышка - 1,000,000 монет", "buy_biz")]
+  ]);
+
+  await ctx.reply(
+    `🛒 **МАГАЗИН И УСЛУГИ**\n\n` +
+    `💰 Ваш баланс: 🪙 **${u.balance.toLocaleString()} монет**\n\n` +
+    `Выберите товар для покупки:`,
+    keyboard
+  );
+});
+
+bot.action("buy_vip_7", async (ctx) => {
+  const u = ecoUser(ctx);
+  if (u.balance < 50000) return ctx.answerCbQuery("❌ Недостаточно средств! Нужно 50,000 монет.", { show_alert: true });
+
+  u.balance -= 50000;
+  u.vip = true;
+  u.vipExpires = Date.now() + SERVICE_7_DAYS;
+
+  await ctx.editMessageText(`🎉 **ПОЗДРАВЛЯЕМ!**\nВы успешно приобрели 👑 **VIP статус на 7 дней**!\n\n💰 Остаток: ${u.balance.toLocaleString()} монет`);
+});
+
+bot.action("buy_car", async (ctx) => {
+  const u = ecoUser(ctx);
+  if (u.balance < 100000) return ctx.answerCbQuery("❌ Недостаточно средств!", { show_alert: true });
+  u.balance -= 100000;
+  u.car = "BMW M5 CS";
+  await ctx.editMessageText(`🏎️ Вы успешно купили **BMW M5 CS**!`);
+});
+
+bot.action("buy_house", async (ctx) => {
+  const u = ecoUser(ctx);
+  if (u.balance < 500000) return ctx.answerCbQuery("❌ Недостаточно средств!", { show_alert: true });
+  u.balance -= 500000;
+  u.house = "Вилла на Пхукете";
+  await ctx.editMessageText(`🏰 Вы успешно купили **Виллу на Пхукете**!`);
+});
+
+bot.action("buy_biz", async (ctx) => {
+  const u = ecoUser(ctx);
+  if (u.balance < 1000000) return ctx.answerCbQuery("❌ Недостаточно средств!", { show_alert: true });
+  u.balance -= 1000000;
+  u.business = "Нефтяная Вышка";
+  await ctx.editMessageText(`💼 Вы успешно купили **Бизнес: Нефтяная Вышка**!`);
+});
+
+// ==================== СОЗЛАМАЛАР (SETTINGS) ====================
+
+bot.hears(/^!?(настройки|settings|созламалар)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const status = u.notif ? "🔔 Включены" : "🔕 Выключены";
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback(`Уведомления: ${status}`, "toggle_notif")],
+    [Markup.button.callback("📜 Инструкция / Обучение", "show_help")]
+  ]);
+
+  await ctx.reply(
+    `⚙️ **НАСТРОЙКИ ПРОФИЛЯ**\n\n` +
+    `👤 Пользователь: ${ecoName(u)}\n` +
+    `🆔 ID: \`${u.id}\`\n` +
+    `🔔 Уведомления: **${status}**\n\n` +
+    `Выберите нужную опцию:`,
+    keyboard
+  );
+});
+
+bot.action("toggle_notif", async (ctx) => {
+  const u = ecoUser(ctx);
+  u.notif = !u.notif;
+  const status = u.notif ? "🔔 Включены" : "🔕 Выключены";
+  await ctx.answerCbQuery(`Уведомления: ${status}`);
+  await ctx.editMessageReplyMarkup(Markup.inlineKeyboard([
+    [Markup.button.callback(`Уведомления: ${status}`, "toggle_notif")],
+    [Markup.button.callback("📜 Инструкция / Обучение", "show_help")]
+  ]).reply_markup);
+});
+
+bot.action("show_help", async (ctx) => {
+  await ctx.reply(
+    `📖 **ОБУЧЕНИЕ И ИНСТРУКЦИЯ**\n\n` +
+    `1. **Заработок:** Используйте команды \`Бонус\` (раз в 24 часа) и \`Работа\` (раз в час).\n` +
+    `2. **Трейдинг:** Покупайте BTC дешевле через \`Купить бтц\` и продавайте через \`Продать бтц\`.\n` +
+    `3. **Магазин:** Введите \`Магазин\` для покупки VIP статуса на 7 дней, машин и домов.\n` +
+    `4. **Игры:** Пишите \`Игры\` для вывода 21 уникальных мини-игр.`
+  );
+});
+
+// ==================== ИГРЫ И ЭКОНОМИКА ====================
 
 bot.hears(/^!?(бонус|bonus)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const now = Date.now();
   if (now - u.lastBonus < 86400000) {
-    return ctx.reply("⏳ Bonusingizni har 24 soatda bir marta olishingiz mumkin!");
+    return ctx.reply("⏳ Вы уже получали бонус! Возвращайтесь через 24 часа.");
   }
-  const reward = Math.floor(Math.random() * 5000) + 1000;
+  const reward = u.vip ? 15000 : 5000;
   u.balance += reward;
   u.lastBonus = now;
-  await ctx.reply(`🎁 Sizga **${reward.toLocaleString()}** tanga bonus berildi!\n💰 Balans: ${u.balance.toLocaleString()}`);
+  await ctx.reply(`🎁 Вы получили ежедневный бонус: +🪙 **${reward.toLocaleString()} монет**!\n💰 Баланс: ${u.balance.toLocaleString()}`);
 });
 
-bot.hears(/^!?(работа|rabota|ish)$/i, async (ctx) => {
+bot.hears(/^!?(работа|rabota)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const now = Date.now();
   if (now - u.lastWork < 3600000) {
-    return ctx.reply("⏳ Ishlash uchun 1 soat kutishingiz kerak!");
+    return ctx.reply("⏳ Отдохните! Работать можно раз в час.");
   }
-  const earned = Math.floor(Math.random() * 3000) + 500;
+  const earned = Math.floor(Math.random() * 4000) + 1000;
   u.balance += earned;
   u.lastWork = now;
-  await ctx.reply(`💼 Ishladingiz va **${earned.toLocaleString()}** tanga maosh oldingiz!\n💰 Balans: ${u.balance.toLocaleString()}`);
+  await ctx.reply(`💼 Вы успешно поработали и заработали: +🪙 **${earned.toLocaleString()} монет**!`);
 });
 
-// Trading (Birja)
-bot.hears(/^!?(трейдинг|trading|birja)$/i, async (ctx) => {
+bot.hears(/^!?(профиль|profile|баланс)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  const rate = 1500; // 1 Crypto = 1500 tanga
   await ctx.reply(
-    `📈 **TRADING (BIRJA)**\n\n` +
-    `📊 1 BTC Kursi: **${rate} tanga**\n` +
-    `💰 Sizning BTC: **${u.crypto} BTC**\n` +
-    `🪙 Balans: **${u.balance.toLocaleString()} tanga**\n\n` +
-    `Buyruqlar:\n` +
-    `• \`Купить бтц [soni]\` — BTC sotib olish\n` +
-    `• \`Продать бтц [soni]\` — BTC sotish`
+    `👤 **ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ**\n\n` +
+    `Имя: ${ecoName(u)}\n` +
+    `🆔 ID: \`${u.id}\`\n` +
+    `🪙 Кошелек: ${u.balance.toLocaleString()} монет\n` +
+    `🏦 Банк: ${u.bank.toLocaleString()} монет\n` +
+    `📊 Крипта: ${u.crypto} BTC\n\n` +
+    `🏎️ Авто: ${u.car || "Нет"}\n` +
+    `🏰 Дом: ${u.house || "Нет"}\n` +
+    `💼 Бизнес: ${u.business || "Нет"}`
   );
 });
 
-bot.hears(/^!(купить бтц|buy btc) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const amount = Number(ctx.match[2]);
-  const cost = amount * 1500;
-  if (u.balance < cost) return ctx.reply("❌ Balansda tanga yetarli emas!");
-  u.balance -= cost;
-  u.crypto += amount;
-  await ctx.reply(`✅ **${amount} BTC** sotib oldingiz! Balans: ${u.balance.toLocaleString()} tanga`);
-});
-
-bot.hears(/^!(продать бтц|sell btc) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const amount = Number(ctx.match[2]);
-  if (u.crypto < amount) return ctx.reply("❌ Sizda buncha BTC yo'q!");
-  const gain = amount * 1500;
-  u.crypto -= amount;
-  u.balance += gain;
-  await ctx.reply(`✅ **${amount} BTC** sotdingiz! +${gain.toLocaleString()} tanga.`);
-});
-
-// ==================== MINI GAMES (21 TA) ====================
-
-// 1. MINA O'YINI (BUTTONLI 5x5 GRID)
-bot.hears(/^!(мина|mina) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[2]);
-  if (bet <= 0 || u.balance < bet) return ctx.reply("❌ Balans yetarsiz yoki stavka xato!");
-
-  u.balance -= bet;
-  const bombPos = Math.floor(Math.random() * 25);
-  
-  const buttons = [];
-  for (let i = 0; i < 25; i++) {
-    buttons.push(Markup.button.callback("❓", `mine_${i}_${bombPos}_${bet}`));
-  }
-  const grid = [];
-  while (buttons.length) grid.push(buttons.splice(0, 5));
-
-  await ctx.reply(`💣 **MINA (5x5)**\nStavka: ${bet} tanga\nMaydondagi 1 ta bombani topmasdan bosishga harakat qiling:`, Markup.inlineKeyboard(grid));
-});
-
-bot.action(/^mine_(\d+)_(\d+)_(\d+)$/, async (ctx) => {
-  const clicked = Number(ctx.match[1]);
-  const bomb = Number(ctx.match[2]);
-  const bet = Number(ctx.match[3]);
-  const u = ecoUser(ctx);
-
-  if (clicked === bomb) {
-    await ctx.editMessageText(`💥 **BOMBA PORTLADI!**\nSiz ${bet} tanga boy berdingiz.`);
-  } else {
-    const win = Math.floor(bet * 1.8);
-    u.balance += win;
-    await ctx.editMessageText(`🎉 **G'ALABA!** Siz bombani chetlab o'tdingiz!\nYutug'ingiz: +${win} tanga!`);
-  }
-});
-
-// 2. PIRAMIDA O'YINI
-bot.hears(/^!(пирамида|piramida) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[2]);
-  if (bet <= 0 || u.balance < bet) return ctx.reply("❌ Balans yetarsiz!");
-
-  u.balance -= bet;
-  const chance = Math.random() < 0.5;
-  if (chance) {
-    const win = Math.floor(bet * 2.5);
-    u.balance += win;
-    await ctx.reply(`🔺 **Piramidaga chiqdingiz!** 2.5x ko'paytirildi: +${win} tanga!`);
-  } else {
-    await ctx.reply(`💥 Piramida yiqildi! ${bet} tanga yo'qotdingiz.`);
-  }
-});
-
-// 3. BOMBA O'YINI
-bot.hears(/^!(бомба|bomba) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[2]);
-  if (bet <= 0 || u.balance < bet) return ctx.reply("❌ Balans yetarsiz!");
-
-  u.balance -= bet;
-  const isSafe = Math.floor(Math.random() * 3) !== 0; // 3 dan 1 imkoniyat portlash
-  if (isSafe) {
-    const win = Math.floor(bet * 1.5);
-    u.balance += win;
-    await ctx.reply(`💣 Bomba miltilladi lekin portlamadi! +${win} tanga yutdingiz!`);
-  } else {
-    await ctx.reply(`💥 BOMBA PORTLADI! ${bet} tanga boy berildi.`);
-  }
-});
-
-// BARCHA O'YINLAR RO'YXATI (21 TA)
-bot.hears(/^!?(игры|igri|o'yinlar)$/i, async (ctx) => {
+// 21 ТА ИГРА
+bot.hears(/^!?(игры|igri)$/i, async (ctx) => {
   await ctx.reply(
-    `🎮 **21 TA MINI O'YINLAR RO'YXATI**\n\n` +
-    `1. \`Мина [bet]\` - Tugmali Mina (5x5)\n` +
-    `2. \`Пирамида [bet]\` - Piramida\n` +
-    `3. \`Бомба [bet]\` - Bomba o'yini\n` +
-    `4. \`Кость [bet]\` - Suyak (Dice)\n` +
-    `5. \`Дартс [bet]\` - Darts\n` +
-    `6. \`Баскетбол [bet]\` - Basketbol\n` +
-    `7. \`Футбол [bet]\` - Futbol\n` +
-    `8. \`Казино [bet]\` - Kazino\n` +
-    `9. \`Орел [bet]\` - Tanga tashlash (Orel)\n` +
-    `10. \`Решка [bet]\` - Tanga tashlash (Reshka)\n` +
-    `11. \`Рулетка [bet]\` - Ruletka\n` +
-    `12. \`Дуэль [bet]\` - Duel\n` +
-    `13. \`Угадай [1-5] [bet]\` - Sonni top\n` +
-    `14. \`Сейф [bet]\` - Seif buzish\n` +
-    `15. \`Сундук [bet]\` - Sandiq ochish\n` +
-    `16. \`Колесо [bet]\` - Omad g'ildiragi\n` +
-    `17. \`Лотерея [bet]\` - Lotereya\n` +
-    `18. \`Тир [bet]\` - Otish xonasi\n` +
-    `19. \`Скачки [bet]\` - Ot poygasi\n` +
-    `20. \`Крипто [bet]\` - Tezkor trading\n` +
-    `21. \`Блекджек [bet]\` - Blackjack\n\n` +
-    `💡 *Misol:* \`Мина 100\` yoki \`Бомба 500\``
+    `🎮 **СПИСОК 21 МИНИ-ИГР:**\n\n` +
+    `1. \`Мина [ставка]\` - Игра Мина (5x5)\n` +
+    `2. \`Пирамида [ставка]\` - Строительство пирамиды\n` +
+    `3. \`Бомба [ставка]\` - Разминирование\n` +
+    `4. \`Кость [ставка]\` - Игровой кубик\n` +
+    `5. \`Дартс [ставка]\` - Бросок в мишень\n` +
+    `6. \`Баскетбол [ставка]\` - Бросок в корзину\n` +
+    `7. \`Футбол [ставка]\` - Пенальти\n` +
+    `8. \`Казино [ставка]\` - Рулетка\n` +
+    `9. \`Орел [ставка]\` - Монетка Орел\n` +
+    `10. \`Решка [ставка]\` - Монетка Решка\n` +
+    `11. \`Дуэль [ставка]\` - Перестрелка\n` +
+    `12. \`Угадай [1-5] [ставка]\` - Угадай число\n` +
+    `13. \`Сейф [ставка]\` - Взлом сейфа\n` +
+    `14. \`Сундук [ставка]\` - Открыть сундук\n` +
+    `15. \`Колесо [ставка]\` - Колесо фортуны\n` +
+    `16. \`Лотерея [ставка]\` - Купон\n` +
+    `17. \`Тир [ставка]\` - Стрельба\n` +
+    `18. \`Скачки [ставка]\` - Скачки лошадей\n` +
+    `19. \`Крипто [ставка]\` - Ставка на курс\n` +
+    `20. \`Блекджек [ставка]\` - Картeжная игра\n` +
+    `21. \`Кости2 [ставка]\` - Кости с ботом`
   );
 });
 
-// GENERAL & START
+// START
 bot.command("start", async (ctx) => {
   const u = ecoUser(ctx);
   await ctx.reply(
-    `👋 **Salom, ${u.name}!**\n\n` +
-    `🤖 8-A ADMIN & GAME BOT tayyor.\n\n` +
-    `📌 **Buyruqlar:**\n` +
-    `• \`Баланс\` — Balansni ko'rish\n` +
-    `• \`Бонус\` — Kunlik bonus\n` +
-    `• \`Работа\` — Ishlash\n` +
-    `• \`Трейдинг\` — Birja paneli\n` +
-    `• \`Игры\` — 21 ta o'yin ro'yxati`,
+    `👋 **Приветствуем, ${u.name}!**\n\n` +
+    `🤖 **8-A ADMIN & GAME BOT**\n\n` +
+    `📌 **Основные команды:**\n` +
+    `• \`Профиль\` / \`Баланс\` — Личный кабинет\n` +
+    `• \`Магазин\` — Покупка VIP (7 дней), машин, домов\n` +
+    `• \`Настройки\` — Настройки профиля и обучение\n` +
+    `• \`Бонус\` — Ежедневная награда\n` +
+    `• \`Работа\` — Заработать монеты\n` +
+    `• \`Игры\` — Список 21 игр`,
     Markup.removeKeyboard()
-  );
-});
-
-bot.hears(/^!?(баланс|balance)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  await ctx.reply(
-    `💰 **Sening Balansing:**\n` +
-    `👤 Foydalanuvchi: ${ecoName(u)}\n` +
-    `🪙 Tangalar: ${u.balance.toLocaleString()}\n` +
-    `📈 BTC Crypto: ${u.crypto} BTC`
   );
 });
 
@@ -296,9 +311,9 @@ async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🔥 Bot to'liq yangilandi va ishga tushdi!");
+    console.log("🔥 Бот успешно запущен и обновлен!");
   } catch (err) {
-    console.error("Bot xatosi:", err);
+    console.error(" Ошибка бота:", err);
   }
 }
 
