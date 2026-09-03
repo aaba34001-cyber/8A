@@ -8,6 +8,7 @@ const EXTRA_ADMINS = ["man_mass", "man_admin", "man_adminn", "man_adminnn"];
 const economyUsers = new Map();
 const activeMinesGames = new Map();
 const activePyramidGames = new Map();
+const activeTradingGames = new Map();
 
 function ecoUser(ctx) {
   const id = String(ctx.from.id);
@@ -43,11 +44,79 @@ setInterval(() => {
   });
 }, 60 * 60 * 1000);
 
-// ==================== МЕНЮ ВСЕХ 21 ИГР ====================
+// ==================== МИНИ-ИГРА: ТРЕЙДИНГ (ВВЕРХ / ВНИЗ) ====================
+
+bot.hears(/^(трейдинг|трейд|trade) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[2]);
+  if (u.balance < bet) return ctx.reply("❌ Недостаточно монет в кошельке!");
+
+  u.balance -= bet;
+  const userId = ctx.from.id;
+
+  const startPrice = (Math.random() * 5000 + 40000).toFixed(2); // Начальная цена BTC
+
+  activeTradingGames.set(userId, {
+    bet: bet,
+    startPrice: Number(startPrice),
+    pair: "BTC/USDT"
+  });
+
+  const buttons = Markup.inlineKeyboard([
+    [
+      Markup.button.callback("📈 Вверх (LONG)", "trade_up"),
+      Markup.button.callback("📉 Вниз (SHORT)", "trade_down")
+    ]
+  ]);
+
+  await ctx.reply(
+    `📊 **ТРЕЙДИНГ СИМУЛЯТОР (BTC/USDT)**\n\n` +
+    `💵 Ваша ставка: **${bet.toLocaleString()} монет**\n` +
+    `📍 Текущая цена: **$${startPrice}**\n\n` +
+    `Сделайте ваш прогноз цены на ближайшую свечу:`,
+    buttons
+  );
+});
+
+async function processTradeResult(ctx, direction) {
+  const userId = ctx.from.id;
+  const game = activeTradingGames.get(userId);
+  if (!game) return ctx.answerCbQuery("❌ Сделка не найдена или уже завершена!", { show_alert: true });
+
+  activeTradingGames.delete(userId);
+  const u = ecoUser(ctx);
+
+  // Генерируем процент изменения от -5% до +5%
+  const percentChange = (Math.random() * 10 - 5).toFixed(2);
+  const priceChange = (game.startPrice * (percentChange / 100)).toFixed(2);
+  const finalPrice = (game.startPrice + Number(priceChange)).toFixed(2);
+
+  const isWin = (direction === "up" && percentChange > 0) || (direction === "down" && percentChange < 0);
+
+  let resultMsg = `📊 **РЕЗУЛЬТАТ ТРЕЙДИНГА**\n\n` +
+    `📍 Цена входа: **$${game.startPrice}**\n` +
+    `🏁 Цена закрытия: **$${finalPrice}** (${percentChange >= 0 ? "+" : ""}${percentChange}%)\n\n`;
+
+  if (isWin) {
+    const win = Math.floor(game.bet * 1.95);
+    u.balance += win;
+    resultMsg += `🎉 **УСПЕШНАЯ СДЕЛКА!** Ваш прогноз оправдался.\n💰 Вы выиграли: **${win.toLocaleString()} монет** (+95%)`;
+  } else {
+    resultMsg += `📉 **ЛИКВИДАЦИЯ!** Прогноз не оправдался.\n💸 Вы потеряли: **${game.bet.toLocaleString()} монет**`;
+  }
+
+  await ctx.editMessageText(resultMsg);
+}
+
+bot.action("trade_up", (ctx) => processTradeResult(ctx, "up"));
+bot.action("trade_down", (ctx) => processTradeResult(ctx, "down"));
+
+// ==================== МЕНЮ ВСЕХ 22 ИГР ====================
 
 bot.hears(/^(игры|games)$/i, async (ctx) => {
   await ctx.reply(
-    `🎰 **ПОЛНЫЙ СПИСОК 21 ИГРЫ** 🎰\n\n` +
+    `🎰 **ПОЛНЫЙ СПИСОК 22 ИГР** 🎰\n\n` +
+    `📈 \`трейдинг [ставка]\` — Трейдинг бинарными опционами (LONG/SHORT)\n` +
     `1. \`мина [ставка]\` — Пошаговые Мины 7x7 на кнопках\n` +
     `2. \`пирамида [ставка]\` — Пошаговая Пирамида (4 кнопки, до x50)\n` +
     `3. \`кубик [1-6] [ставка]\` — Угадать число на кости\n` +
@@ -69,7 +138,7 @@ bot.hears(/^(игры|games)$/i, async (ctx) => {
     `19. \`краш [ставка]\` — Успеть забрать до краша\n` +
     `20. \`хайло [выше/ниже] [ставка]\` — Игра Выше или Ниже\n` +
     `21. \`камень [камень/ножницы/бумага] [ставка]\` — Цу-е-фа\n\n` +
-    `📝 Команды работают **без знака !**`
+    `📝 Все команды работают **без знака !**`
   );
 });
 
@@ -254,7 +323,7 @@ bot.action("mines_cashout", async (ctx) => {
 
 bot.action("mines_none", (ctx) => ctx.answerCbQuery());
 
-// ==================== 3-21 ОСТАЛЬНЫЕ МИНИ-ИГРЫ ====================
+// ==================== ОСТАЛЬНЫЕ МИНИ-ИГРЫ ====================
 
 bot.hears(/^кубик ([1-6]) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
@@ -552,7 +621,7 @@ bot.hears(/^банк снять (\d+|все)$/i, async (ctx) => {
 
 bot.hears(/^(богатые|топ|top)$/i, async (ctx) => {
   const allUsers = Array.from(economyUsers.values());
-  if (allUsers.length === 0) return ctx.reply("📊 Список богат пока пуст.");
+  if (allUsers.length === 0) return ctx.reply("📊 Список богатых пока пуст.");
 
   allUsers.sort((a, b) => (b.balance + b.bank) - (a.balance + a.bank));
 
@@ -582,14 +651,14 @@ bot.hears(/^бонус$/i, async (ctx) => {
 });
 
 bot.command("start", async (ctx) => {
-  await ctx.reply("👋 Бот готов к работе! Все 21 игра доступны без знак '!'. Напишите `игры`.");
+  await ctx.reply("👋 Бот готов! Добавлена игра `трейдинг [ставка]`. Напишите `игры`.");
 });
 
 async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🔥 Полная версия с 21 игрой успешно запущена!");
+    console.log("🔥 Бот с Трейдингом успешно запущен!");
   } catch (err) {
     console.error(err);
   }
