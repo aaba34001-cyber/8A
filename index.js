@@ -150,7 +150,7 @@ bot.hears(/^(краш|crash|krash) (\d+)$/i, async (ctx) => {
 
   u.balance -= bet;
 
-  const isCrash = Math.random() < 0.50; // 50% chance crash
+  const isCrash = Math.random() < 0.70; // 70% chance crash
   if (isCrash) {
     const crashPoint = (Math.random() * 0.9 + 1.0).toFixed(2);
     return ctx.reply(`📈 **CRASH GAME**\n\n💥 График рухнул на **x${crashPoint}**!\n📉 Вы потеряли **-${bet.toLocaleString()} монет**.`);
