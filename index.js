@@ -1,5 +1,5 @@
 require("dotenv").config();
-const { Telegraf, Markup } = require("telegraf");
+const { Telegraf } = require("telegraf");
 
 const token = process.env.BOT_TOKEN;
 if (!token) {
@@ -18,20 +18,29 @@ function ecoUser(ctx) {
       name: ctx.from.first_name || "Игрок",
       nickname: null,
       username: ctx.from.username || null,
-      balance: 100000,
-      bank: 0,
+      balance: 1000000,
+      bank: 500000,
       credit: 0,
       experience: 0,
       level: 1,
       business: "Отсутствует",
       bizIncome: 0,
+      lastBizCollect: 0,
       car: "Отсутствует",
       house: "Отсутствует",
+      phone: "Отсутствует",
+      yacht: "Отсутствует",
+      plane: "Отсутствует",
       wins: 0,
       losses: 0,
       lastBonus: 0,
-      lastWork: 0
+      lastWork: 0,
+      lastCrime: 0
     });
+  } else {
+    const u = economyUsers.get(id);
+    u.name = ctx.from.first_name || u.name;
+    u.username = ctx.from.username || u.username;
   }
   return economyUsers.get(id);
 }
@@ -50,18 +59,84 @@ function addExp(u, amount) {
   }
 }
 
-// 📌 MENYU VA ASOSIY BUYRUQLAR
+// 📌 KATALOGLAR (TO'LIQ MAHSULOTLAR)
+const CARللCARS = [
+  { name: "🚲 Велосипед", price: 5000 },
+  { name: "🛵 Электроскутер", price: 20000 },
+  { name: "🏎 Chevrolet Spark", price: 60000 },
+  { name: "🚘 Chevrolet Nexia 3", price: 100000 },
+  { name: "🚘 Chevrolet Cobalt", price: 150000 },
+  { name: "🚘 Chevrolet Gentra", price: 220000 },
+  { name: "🏎 Chevrolet Malibu 2", price: 550000 },
+  { name: "🏎 Chevrolet Tahoe", price: 1200000 },
+  { name: "🏎 BMW M3 G80", price: 2000000 },
+  { name: "🏎 BMW M5 CS", price: 3500000 },
+  { name: "🏎 Mercedes-AMG GT63s", price: 5000000 },
+  { name: "🏎 Porsche 911 Turbo S", price: 8000000 },
+  { name: "🏎 Audi RS7 Sportback", price: 10000000 },
+  { name: "🏎 Lamborghini Urus", price: 15000000 },
+  { name: "🏎 Ferrari SF90 Stradale", price: 25000000 },
+  { name: "🏎 Bugatti Chiron Sport", price: 50000000 },
+  { name: "🏎 Rolls-Royce Phantom", price: 80000000 },
+  { name: "🏎 Koenigsegg Jesko", price: 120000000 }
+];
+
+const HOUSES = [
+  { name: "⛺️ Палатка в лесу", price: 10000 },
+  { name: "🛋 Комната в общежитии", price: 50000 },
+  { name: "🏠 Однокомнатная квартира", price: 300000 },
+  { name: "🏡 Трехкомнатная новостройка", price: 1000000 },
+  { name: "🏰 Двухэтажный дом", price: 3500000 },
+  { name: "🏰 Роскошная вилла", price: 12000000 },
+  { name: "🏰 Особняк на Рублевке", price: 40000000 },
+  { name: "👑 VIP Пентхаус в Сити", price: 100000000 },
+  { name: "🏝 Собственный тропический остров", price: 300000000 }
+];
+
+const PHONES = [
+  { name: "📞 Nokia 3310", price: 3000 },
+  { name: "📱 Xiaomi Redmi 13", price: 25000 },
+  { name: "📱 Samsung S24 Ultra", price: 120000 },
+  { name: "📱 iPhone 16 Pro Max 1TB", price: 300000 },
+  { name: "💎 Gold Caviar iPhone", price: 3000000 }
+];
+
+const BIZ = [
+  { name: "📦 Точка Paynet / Киоск", price: 150000, income: 8000 },
+  { name: "🍔 Лавашная / Шаурмичная", price: 400000, income: 25000 },
+  { name: "☕️ Уютная Кофейня", price: 1000000, income: 70000 },
+  { name: "🛒 Сетевой Супермаркет", price: 3000000, income: 220000 },
+  { name: "🏢 IT-Компания", price: 8000000, income: 650000 },
+  { name: "🏨 Пятизвездочный Отель", price: 20000000, income: 1800000 },
+  { name: "⛽️ Сеть Автозаправок (АЗС)", price: 60000000, income: 5500000 },
+  { name: "💎 Завод по добыче золота", price: 150000000, income: 15000000 }
+];
+
+const YACHTS = [
+  { name: "🚤 Катер Sea-Doo", price: 500000 },
+  { name: "🛥 Моторная Яхта", price: 5000000 },
+  { name: "🛳 Супер-Яхта Eclipse", price: 50000000 }
+];
+
+const PLANES = [
+  { name: "🛩 Частный Самолет Cessna", price: 8000000 },
+  { name: "✈️ Бизнес-джет Gulfstream", price: 45000000 },
+  { name: "🚀 Личный Boeing 747", price: 200000000 }
+];
+
+// 📌 ASOSIY MENYU VA BUYRUQLAR
 bot.hears(/^(меню|menu|start|старт)$/i, async (ctx) => {
   await ctx.reply(
     `🤖 **ГЛАВНОЕ МЕНЮ БОТА**\n\n` +
-    `👤 \`профиль\` — Профиль и баланс\n` +
+    `👤 \`профиль\` — Профиль и имущество\n` +
     `💰 \`баланс\` — Узнать баланс\n` +
     `🏦 \`банк [сумма]\` / \`снять [сумма]\`\n` +
     `🎁 \`бонус\` — Ежедневный бонус\n` +
     `💼 \`работа\` — Заработать монеты\n` +
-    `🏆 \`богатые\` — Топ богачей\n` +
-    `🛒 \`маг\` — Магазин машин и домов\n` +
-    `🎮 \`игры\` — Каталог всех игр`,
+    `🏢 \`бизнесы\` — Список бизнесов\n` +
+    `🛒 \`магазин\` — Магазин (авто, дома, телефоны, яхты, самолеты)\n` +
+    `🏆 \`богатые\` — Топ-10 богатейших игроков\n` +
+    `🎮 \`игры\` — Каталог из 30+ игр`,
     { parse_mode: "Markdown" }
   );
 });
@@ -69,7 +144,7 @@ bot.hears(/^(меню|menu|start|старт)$/i, async (ctx) => {
 bot.hears(/^(баланс|balance|бал)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   await ctx.reply(
-    `💰 **Ваш баланс:**\n` +
+    `💰 **Ваш баланс:**\n\n` +
     `💵 Наличные: **${u.balance.toLocaleString()} монет**\n` +
     `🏦 В банке: **${u.bank.toLocaleString()} монет**\n` +
     `💳 Кредит: **${u.credit.toLocaleString()} монет**`,
@@ -82,13 +157,16 @@ bot.hears(/^(профиль|проф|profile)$/i, async (ctx) => {
   await ctx.reply(
     `👤 **ПРОФИЛЬ ИГРОКА:**\n\n` +
     `👨‍💼 Имя: **${ecoName(u)}**\n` +
-    `🆔 ID: \`$ {u.id}\`\n` +
-    `⭐ Уровень: **${u.level} LVL** (${u.experience}/${u.level * 100} EXP)\n` +
+    `🆔 ID: \`${u.id}\`\n` +
+    `⭐ Уровень: **${u.level} LVL** (${u.experience}/${u.level * 100} EXP)\n\n` +
     `💵 Наличные: **${u.balance.toLocaleString()} монет**\n` +
-    `🏦 Банк: **${u.bank.toLocaleString()} монет**\n` +
+    `🏦 Банк: **${u.bank.toLocaleString()} монет**\n\n` +
     `🚘 Авто: **${u.car}**\n` +
     `🏠 Дом: **${u.house}**\n` +
-    `🏢 Бизнес: **${u.business}**\n` +
+    `📱 Телефон: **${u.phone}**\n` +
+    `🛥 Яхта: **${u.yacht}**\n` +
+    `✈️ Самолет: **${u.plane}**\n` +
+    `🏢 Бизнес: **${u.business}** (+${u.bizIncome.toLocaleString()}/час)\n\n` +
     `🏆 Победы / Поражения: ${u.wins} / ${u.losses}`,
     { parse_mode: "Markdown" }
   );
@@ -106,31 +184,30 @@ bot.hears(/^(богатые|топ|рейтинг|top)$/i, async (ctx) => {
   await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
-// 🎁 BONUS
+// 🎁 BONUS & WORK
 bot.hears(/^(бонус|bonus)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const now = Date.now();
   if (now - u.lastBonus < 24 * 60 * 60 * 1000) {
     return ctx.reply("⏳ Вы уже получали бонус за последние 24 часа!");
   }
-  const reward = 25000 * u.level;
+  const reward = 50000 * u.level;
   u.balance += reward;
   u.lastBonus = now;
-  addExp(u, 20);
+  addExp(u, 30);
   await ctx.reply(`🎁 Вы получили ежедневный бонус: **+${reward.toLocaleString()} монет**!`);
 });
 
-// 💼 ISH
 bot.hears(/^(работа|work)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const now = Date.now();
-  if (now - u.lastWork < 30 * 60 * 1000) {
-    return ctx.reply("⏳ Вы устали! Отдохните еще немного перед следующей работой.");
+  if (now - u.lastWork < 15 * 60 * 1000) {
+    return ctx.reply("⏳ Вы устали! Отдохните немного перед следующей сменой.");
   }
-  const earned = Math.floor(Math.random() * 15000) + 5000;
+  const earned = Math.floor(Math.random() * 30000) + 10000;
   u.balance += earned;
   u.lastWork = now;
-  addExp(u, 10);
+  addExp(u, 15);
   await ctx.reply(`💼 Вы сходили на работу и заработали **+${earned.toLocaleString()} монет**!`);
 });
 
@@ -153,35 +230,110 @@ bot.hears(/^снять\s+(\d+)$/i, async (ctx) => {
   await ctx.reply(`💵 Вы сняли со счета **${amount.toLocaleString()} монет**.`);
 });
 
-// 🛒 MAGAZIN
+// 🛒 ULKAN MAGAZIN VA BIZNESLAR
 bot.hears(/^(маг|магазин|shop)$/i, async (ctx) => {
-  await ctx.reply(
-    `🛒 **МАГАЗИН ИМУЩЕСТВА**\n\n` +
-    `🚘 \`купить авто 1\` — Chevrolet Spark (50,000 монет)\n` +
-    `🚘 \`купить авто 2\` — Chevrolet Malibu (500,000 монет)\n` +
-    `🏠 \`купить дом 1\` — Квартира (300,000 монет)\n` +
-    `🏠 \`купить дом 2\` — Вилла (5,000,000 монет)`,
-    { parse_mode: "Markdown" }
-  );
+  let text = `🛒 **ПРЕМИУМ МАГАЗИН ИМУЩЕСТВА**\n\n`;
+  text += `🚘 **Автомобили (\`купить авто [номер]\`):**\n`;
+  CARS.forEach((c, i) => { text += `${i + 1}. ${c.name} — ${c.price.toLocaleString()} монет\n`; });
+
+  text += `\n🏠 **Недвижимость (\`купить дом [номер]\`):**\n`;
+  HOUSES.forEach((h, i) => { text += `${i + 1}. ${h.name} — ${h.price.toLocaleString()} монет\n`; });
+
+  text += `\n📱 **Телефоны (\`купить телефон [номер]\`):**\n`;
+  PHONES.forEach((p, i) => { text += `${i + 1}. ${p.name} — ${p.price.toLocaleString()} монет\n`; });
+
+  text += `\n🛥 **Яхты (\`купить яхту [номер]\`):**\n`;
+  YACHTS.forEach((y, i) => { text += `${i + 1}. ${y.name} — ${y.price.toLocaleString()} монет\n`; });
+
+  text += `\n✈️ **Самолеты (\`купить самолет [номер]\`):**\n`;
+  PLANES.forEach((pl, i) => { text += `${i + 1}. ${pl.name} — ${pl.price.toLocaleString()} монет\n`; });
+
+  await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
-bot.hears(/^купить авто 1$/i, async (ctx) => {
+bot.hears(/^(бизнесы|бизнес|biz)$/i, async (ctx) => {
+  let text = `🏢 **КАТАЛОГ БИЗНЕСОВ (\`купить бизнес [номер]\`):**\n\n`;
+  BIZ.forEach((b, i) => {
+    text += `${i + 1}. **${b.name}**\n   💰 Цена: ${b.price.toLocaleString()} монет | Доход: +${b.income.toLocaleString()}/час\n\n`;
+  });
+  await ctx.reply(text, { parse_mode: "Markdown" });
+});
+
+// 🛍 SOTIB OLISH LOGIKASI
+bot.hears(/^купить авто (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  if (u.balance < 50000) return ctx.reply("❌ Недостаточно средств!");
-  u.balance -= 50000;
-  u.car = "Chevrolet Spark";
-  await ctx.reply("🎉 Поздравляем с покупкой Chevrolet Spark!");
+  const idx = Number(ctx.match[1]) - 1;
+  if (!CARS[idx]) return ctx.reply("❌ Такой машины нет в каталоге!");
+  const item = CARS[idx];
+  if (u.balance < item.price) return ctx.reply("❌ Недостаточно монет!");
+  u.balance -= item.price;
+  u.car = item.name;
+  addExp(u, 30);
+  await ctx.reply(`🎉 Поздравляем! Вы успешно купили **${item.name}**!`);
 });
 
-bot.hears(/^купить авто 2$/i, async (ctx) => {
+bot.hears(/^купить дом (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
-  if (u.balance < 500000) return ctx.reply("❌ Недостаточно средств!");
-  u.balance -= 500000;
-  u.car = "Chevrolet Malibu";
-  await ctx.reply("🎉 Поздравляем с покупкой Chevrolet Malibu!");
+  const idx = Number(ctx.match[1]) - 1;
+  if (!HOUSES[idx]) return ctx.reply("❌ Такого дома нет в каталоге!");
+  const item = HOUSES[idx];
+  if (u.balance < item.price) return ctx.reply("❌ Недостаточно монет!");
+  u.balance -= item.price;
+  u.house = item.name;
+  addExp(u, 50);
+  await ctx.reply(`🏡 Поздравляем! Ваша новая недвижимость: **${item.name}**!`);
 });
 
-// 📌 2. O'YINLAR
+bot.hears(/^купить телефон (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const idx = Number(ctx.match[1]) - 1;
+  if (!PHONES[idx]) return ctx.reply("❌ Такого телефона нет!");
+  const item = PHONES[idx];
+  if (u.balance < item.price) return ctx.reply("❌ Недостаточно средств!");
+  u.balance -= item.price;
+  u.phone = item.name;
+  addExp(u, 20);
+  await ctx.reply(`📱 Вы купили новый телефон: **${item.name}**!`);
+});
+
+bot.hears(/^купить бизнес (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const idx = Number(ctx.match[1]) - 1;
+  if (!BIZ[idx]) return ctx.reply("❌ Такого бизнеса нет!");
+  const item = BIZ[idx];
+  if (u.balance < item.price) return ctx.reply("❌ Недостаточно средств!");
+  u.balance -= item.price;
+  u.business = item.name;
+  u.bizIncome = item.income;
+  addExp(u, 100);
+  await ctx.reply(`🏢 Вы стали владельцем бизнеса **${item.name}** (+${item.income.toLocaleString()}/час)!`);
+});
+
+bot.hears(/^купить яхту (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const idx = Number(ctx.match[1]) - 1;
+  if (!YACHTS[idx]) return ctx.reply("❌ Такой яхты нет!");
+  const item = YACHTS[idx];
+  if (u.balance < item.price) return ctx.reply("❌ Недостаточно средств!");
+  u.balance -= item.price;
+  u.yacht = item.name;
+  addExp(u, 70);
+  await ctx.reply(`🛥 Вы приобрели роскошную яхту: **${item.name}**!`);
+});
+
+bot.hears(/^купить самолет (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const idx = Number(ctx.match[1]) - 1;
+  if (!PLANES[idx]) return ctx.reply("❌ Такого самолета нет!");
+  const item = PLANES[idx];
+  if (u.balance < item.price) return ctx.reply("❌ Недостаточно средств!");
+  u.balance -= item.price;
+  u.plane = item.name;
+  addExp(u, 150);
+  await ctx.reply(`✈️ Вы купили личный самолет: **${item.name}**!`);
+});
+
+// 🎮 30+ O'YINLAR
 const ALL_GAMES = [
   "казино", "кубик", "рулетка", "слот", "21", "монета", "сейф", "карты",
   "пуш", "пушка", "краш", "трейдинг", "мина", "пирамида", "башня", "бочки",
@@ -240,7 +392,7 @@ async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
-    console.log("🚀 ПОЛНЫЙ МЕГА-БОТ УСПЕШНО ЗАПУЩЕН!");
+    console.log("🚀 MEGA BOT ONLINE!");
   } catch (err) {
     console.error("Ошибка:", err);
   }
