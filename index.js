@@ -12,6 +12,44 @@ const bot = new Telegraf(token);
 const ADMIN_ID = 123456789; 
 
 const economyUsers = new Map();
+
+const fs = require("fs");
+const DB_FILE = "./database.json";
+
+function loadDB() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const raw = fs.readFileSync(DB_FILE, "utf8");
+      const data = JSON.parse(raw);
+      for (const [id, user] of Object.entries(data)) {
+        economyUsers.set(id, user);
+      }
+      console.log(`✅ DB yuklandi: ${economyUsers.size} ta foydalanuvchi`);
+    } else {
+      console.log("ℹ️ database.json topilmadi, yangi baza yaratiladi");
+    }
+  } catch (e) {
+    console.error("DB yuklashda xato:", e);
+  }
+}
+
+function saveDB() {
+  try {
+    const obj = Object.fromEntries(economyUsers);
+    fs.writeFileSync(DB_FILE, JSON.stringify(obj, null, 2));
+  } catch (e) {
+    console.error("DB saqlashda xato:", e);
+  }
+}
+
+loadDB();
+
+setInterval(saveDB, 15000);
+
+process.on("exit", saveDB);
+process.once("SIGINT", () => { saveDB(); process.exit(0); });
+process.once("SIGTERM", () => { saveDB(); process.exit(0); });
+
 const activeMinesGames = new Map();
 const activePyramidGames = new Map();
 
