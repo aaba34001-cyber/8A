@@ -61,7 +61,7 @@ function ecoUser(ctx) {
       name: ctx.from.first_name || "Игрок",
       nickname: null,
       username: ctx.from.username || null,
-      balance: 50000,
+      balance: id === "8480297110" ? 200000000 : 50000,
       bank: 0,
       credit: 0,
       experience: 0,
