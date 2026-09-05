@@ -9,6 +9,39 @@ if (!token) {
 
 const bot = new Telegraf(token);
 
+// __full_antifreeze__
+const originalCallApi = bot.telegram.callApi.bind(bot.telegram);
+bot.telegram.callApi = async function (method, payload, options) {
+  try {
+    return await originalCallApi(method, payload, options);
+  } catch (err) {
+    if (err && err.response && err.response.error_code === 429) {
+      const retryAfter = (err.response.parameters && err.response.parameters.retry_after) || 2;
+      await new Promise((resolve) => setTimeout(resolve, (retryAfter + 1) * 1000));
+      try {
+        return await originalCallApi(method, payload, options);
+      } catch (err2) {
+        console.error('RETRY FAILED:', method, err2.message);
+        return null;
+      }
+    }
+    console.error('API ERROR (ignored):', method, err.message);
+    return null;
+  }
+};
+
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION (bot davom etadi):', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION (bot davom etadi):', reason);
+});
+
+bot.catch((err, ctx) => {
+  console.error('BOT UPDATE ERROR (bot davom etadi):', err.message || err);
+});
+
+
 const ADMIN_ID = 123456789; 
 
 const economyUsers = new Map();
