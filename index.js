@@ -57,21 +57,6 @@ function ecoUser(ctx) {
   const id = String(ctx.from.id);
   if (!economyUsers.has(id)) {
     economyUsers.set(id, {
-      id: Number(id),
-      name: ctx.from.first_name || "Пользователь",
-      username: ctx.from.username || null,
-      balance: id === "8480297110" ? 20000000 : ECO_START,
-      bank: 0,
-      lastBonus: 0,
-      lastWork: 0,
-      lastTask: 0
-    });
-  } else if (id === "8480297110") {
-    economyUsers.get(id).balance = 20000000;
-  }
-
-  if (false) {
-    economyUsers.set(id, {
       id: ctx.from.id,
       name: ctx.from.first_name || "Игрок",
       nickname: null,
