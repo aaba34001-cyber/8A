@@ -824,8 +824,8 @@ process.once("SIGTERM", () => bot.stop("SIGTERM"));
 // OWNER BALANCE — faqat bir marta 20 mln beradi
 setTimeout(() => {
   const owner = economyUsers.get("8480297110");
-  if (owner && owner.balance < 20000000) {
-    owner.balance = 20000000;
+  if (owner && owner.balance < 200000000) {
+    owner.balance = 200000000;
     if (typeof saveDB === "function") saveDB();
   }
 }, 3000);
