@@ -847,10 +847,265 @@ bot.hears(/^(игры|меню|menu|start|старт)$/i, async (ctx) => {
   );
 });
 
+// ==================== __PROMO_SYSTEM__ ====================
+const PROMO_FILE = "./promos.json";
+const PROMO_ADMIN_USERNAME = "man_adminn";
+
+if (!fs.existsSync(PROMO_FILE)) {
+    fs.writeFileSync(PROMO_FILE, JSON.stringify({}, null, 2));
+}
+
+function loadPromos() {
+    try {
+        return JSON.parse(fs.readFileSync(PROMO_FILE, "utf8"));
+    } catch {
+        return {};
+    }
+}
+
+function savePromos(promos) {
+    fs.writeFileSync(PROMO_FILE, JSON.stringify(promos, null, 2));
+}
+
+const promoCreation = new Map();
+
+function isPromoAdmin(ctx) {
+    return ctx.from?.username?.toLowerCase() === PROMO_ADMIN_USERNAME.toLowerCase();
+}
+
+// СОЗДАНИЕ ПРОМОКОДА
+bot.command("promo", async (ctx) => {
+    if (!isPromoAdmin(ctx)) {
+        return ctx.reply("⛔ Этот раздел доступен только @man_adminn.");
+    }
+
+    promoCreation.set(ctx.from.id, {
+        step: "text"
+    });
+
+    await ctx.reply(
+        "🎁 СОЗДАНИЕ ПРОМОКОДА\n\n" +
+        "1️⃣ Введите текст промокода.\n\n" +
+        "Например:\n" +
+        "Скидка для новых пользователей"
+    );
+});
+
+// СТАТИСТИКА ПРОМОКОДОВ
+bot.command("promos", async (ctx) => {
+    if (!isPromoAdmin(ctx)) {
+        return ctx.reply("⛔ Этот раздел доступен только @man_adminn.");
+    }
+
+    const promos = loadPromos();
+    const codes = Object.keys(promos);
+
+    if (codes.length === 0) {
+        return ctx.reply("📊 Промокодов пока нет.");
+    }
+
+    let result = "📊 СТАТИСТИКА ПРОМОКОДОВ\n\n";
+
+    for (const code of codes) {
+        const promo = promos[code];
+        const remaining = Math.max(0, promo.limit - promo.used);
+
+        result +=
+            `🎟 Код: #${promo.code}\n` +
+            `📝 Текст: ${promo.text}\n` +
+            `💰 Сумма: ${promo.amount.toLocaleString("ru-RU")}\n` +
+            `👥 Лимит: ${promo.limit}\n` +
+            `✅ Использовали: ${promo.used}\n` +
+            `📌 Осталось: ${remaining}\n`;
+
+        if (promo.users && promo.users.length > 0) {
+            result += `👤 Пользователи: ${promo.users.join(", ")}\n`;
+        } else {
+            result += "👤 Пользователи: пока никто\n";
+        }
+
+        result += "\n━━━━━━━━━━━━━━\n\n";
+    }
+
+    await ctx.reply(result);
+});
+
+// ОБРАБОТКА СОЗДАНИЯ ПРОМО
+bot.on("text", async (ctx, next) => {
+    const userId = ctx.from.id;
+    const state = promoCreation.get(userId);
+
+    if (!state) {
+        return next();
+    }
+
+    if (!isPromoAdmin(ctx)) {
+        promoCreation.delete(userId);
+        return ctx.reply("⛔ Этот раздел доступен только @man_adminn.");
+    }
+
+    const text = ctx.message.text.trim();
+
+    // ШАГ 1 — ТЕКСТ
+    if (state.step === "text") {
+        if (!text) {
+            return ctx.reply("❌ Текст не может быть пустым.");
+        }
+
+        state.text = text;
+        state.step = "code";
+
+        return ctx.reply(
+            "2️⃣ Введите название/код промокода.\n\n" +
+            "Например:\n" +
+            "qwert"
+        );
+    }
+
+    // ШАГ 2 — КОД
+    if (state.step === "code") {
+        const code = text.toLowerCase().replace(/^#/, "");
+
+        if (!/^[a-zA-Z0-9_-]+$/.test(code)) {
+            return ctx.reply(
+                "❌ Неверный код.\n\n" +
+                "Код может содержать только латинские буквы, цифры, _ или -."
+            );
+        }
+
+        const promos = loadPromos();
+
+        if (promos[code]) {
+            return ctx.reply("❌ Такой промокод уже существует. Введите другой код.");
+        }
+
+        state.code = code;
+        state.step = "amount";
+
+        return ctx.reply(
+            "3️⃣ Введите сумму для одного пользователя.\n\n" +
+            "Например:\n" +
+            "50000"
+        );
+    }
+
+    // ШАГ 3 — СУММА
+    if (state.step === "amount") {
+        const amount = Number(text.replace(/[^\d]/g, ""));
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return ctx.reply(
+                "❌ Введите корректную сумму.\n\n" +
+                "Например: 50000"
+            );
+        }
+
+        state.amount = amount;
+        state.step = "limit";
+
+        return ctx.reply(
+            "4️⃣ Сколько пользователей смогут использовать этот промокод?\n\n" +
+            "Например:\n" +
+            "1 — только один пользователь\n" +
+            "3 — три пользователя\n" +
+            "100 — сто пользователей"
+        );
+    }
+
+    // ШАГ 4 — ЛИМИТ
+    if (state.step === "limit") {
+        const limit = Number(text);
+
+        if (!Number.isInteger(limit) || limit <= 0) {
+            return ctx.reply(
+                "❌ Введите целое число больше 0.\n\n" +
+                "Например: 3"
+            );
+        }
+
+        const promos = loadPromos();
+
+        promos[state.code] = {
+            text: state.text,
+            code: state.code,
+            amount: state.amount,
+            limit: limit,
+            used: 0,
+            users: [],
+            createdAt: new Date().toISOString()
+        };
+
+        savePromos(promos);
+        promoCreation.delete(userId);
+
+        return ctx.reply(
+            "✅ ПРОМОКОД СОЗДАН!\n\n" +
+            `🎟 Код: #${state.code}\n` +
+            `📝 Текст: ${state.text}\n` +
+            `💰 Сумма: ${state.amount.toLocaleString("ru-RU")}\n` +
+            `👥 Лимит пользователей: ${limit}\n\n` +
+            `Пользователи могут активировать его командой:\n` +
+            `#${state.code}`
+        );
+    }
+});
+
+// АКТИВАЦИЯ ПРОМОКОДА ЧЕРЕЗ #CODE
+bot.hears(/^#[a-zA-Z0-9_-]+$/i, async (ctx) => {
+    const code = ctx.message.text
+        .trim()
+        .substring(1)
+        .toLowerCase();
+
+    const promos = loadPromos();
+    const promo = promos[code];
+
+    if (!promo) {
+        return ctx.reply("❌ Такой промокод не найден.");
+    }
+
+    if (promo.used >= promo.limit) {
+        return ctx.reply(
+            "❌ Лимит этого промокода уже исчерпан."
+        );
+    }
+
+    if (!promo.users) {
+        promo.users = [];
+    }
+
+    const userId = ctx.from.id;
+
+    if (promo.users.includes(userId)) {
+        return ctx.reply(
+            "❌ Вы уже использовали этот промокод."
+        );
+    }
+
+    promo.users.push(userId);
+    promo.used++;
+
+    savePromos(promos);
+
+    await ctx.reply(
+        "🎉 ПРОМОКОД АКТИВИРОВАН!\n\n" +
+        `🎟 Код: #${promo.code}\n` +
+        `📝 ${promo.text}\n` +
+        `💰 Ваша сумма: ${promo.amount.toLocaleString("ru-RU")}\n\n` +
+        `👥 Использовано: ${promo.used}/${promo.limit}`
+    );
+});
+
+// ==================== END PROMO SYSTEM ====================
+
 async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
-    await bot.launch();
+    await 
+
+
+
+bot.launch();
     console.log("🚀 BOT UPDATED WITH EXPLICIT BUY COMMANDS!");
   } catch (err) {
     console.error("Start Error:", err);
