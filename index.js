@@ -47,7 +47,7 @@ const ADMIN_ID = 123456789;
 const economyUsers = new Map();
 
 const fs = require("fs");
-const DB_FILE = "./database.json";
+const DB_FILE = process.env.RAILWAY_VOLUME_MOUNT_PATH ? process.env.RAILWAY_VOLUME_MOUNT_PATH + "/database.json" : "./database.json";
 
 function loadDB() {
   try {
