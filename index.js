@@ -69,8 +69,15 @@ function loadDB() {
 function saveDB() {
   try {
     const obj = Object.fromEntries(economyUsers);
-    fs.writeFile(DB_FILE, JSON.stringify(obj), (err) => {
-      if (err) console.error("DB saqlashda xato:", err);
+    const tmpFile = DB_FILE + ".tmp";
+    fs.writeFile(tmpFile, JSON.stringify(obj), (err) => {
+      if (err) {
+        console.error("DB saqlashda xato:", err);
+        return;
+      }
+      fs.rename(tmpFile, DB_FILE, (err2) => {
+        if (err2) console.error("DB almashtirishda xato:", err2);
+      });
     });
   } catch (e) {
     console.error("DB saqlashda xato:", e);
