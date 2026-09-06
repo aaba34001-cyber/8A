@@ -1082,10 +1082,25 @@ bot.hears(/^#[a-zA-Z0-9_-]+$/i, async (ctx) => {
         );
     }
 
+    const user = economyUsers.get(String(userId));
+
+    if (!user) {
+        return ctx.reply(
+            "❌ Ваш профиль не найден. Сначала зарегистрируйтесь в боте."
+        );
+    }
+
+    if (!user.balance) {
+        user.balance = 0;
+    }
+
+    user.balance += promo.amount;
+
     promo.users.push(userId);
     promo.used++;
 
     savePromos(promos);
+    saveDB();
 
     await ctx.reply(
         "🎉 ПРОМОКОД АКТИВИРОВАН!\n\n" +
