@@ -69,7 +69,9 @@ function loadDB() {
 function saveDB() {
   try {
     const obj = Object.fromEntries(economyUsers);
-    fs.writeFileSync(DB_FILE, JSON.stringify(obj, null, 2));
+    fs.writeFile(DB_FILE, JSON.stringify(obj), (err) => {
+      if (err) console.error("DB saqlashda xato:", err);
+    });
   } catch (e) {
     console.error("DB saqlashda xato:", e);
   }
@@ -847,6 +849,24 @@ async function startBot() {
     console.error("Start Error:", err);
   }
 }
+
+
+// ===== WATCHDOG: bot qotib qolsa avtomatik qayta ishga tushadi =====
+let lastUpdateTime = Date.now();
+
+bot.use((ctx, next) => {
+  lastUpdateTime = Date.now();
+  return next();
+});
+
+setInterval(() => {
+  const idleTime = Date.now() - lastUpdateTime;
+  if (idleTime > 10 * 60 * 1000) {
+    console.error("⚠️ 10 daqiqadan beri hech qanday update yo'q — qayta ishga tushirilmoqda...");
+    if (typeof saveDB === "function") saveDB();
+    process.exit(1);
+  }
+}, 60 * 1000);
 
 startBot();
 
