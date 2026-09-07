@@ -1128,22 +1128,6 @@ bot.launch();
 }
 
 
-// ===== WATCHDOG: bot qotib qolsa avtomatik qayta ishga tushadi =====
-let lastUpdateTime = Date.now();
-
-bot.use((ctx, next) => {
-  lastUpdateTime = Date.now();
-  return next();
-});
-
-setInterval(() => {
-  const idleTime = Date.now() - lastUpdateTime;
-  if (idleTime > 10 * 60 * 1000) {
-    console.error("⚠️ 10 daqiqadan beri hech qanday update yo'q — qayta ishga tushirilmoqda...");
-    if (typeof saveDB === "function") saveDB();
-    process.exit(1);
-  }
-}, 60 * 1000);
 
 startBot();
 
