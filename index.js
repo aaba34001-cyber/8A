@@ -472,6 +472,111 @@ bot.hears(/^(купить|sotib) (бизнес) (\d+)$/i, async (ctx) => {
   await ctx.reply(`🏢 Поздравляем! Вы стали владельцем бизнеса **${item.name}**!\n📈 Доход: **+${item.income.toLocaleString()} монет/час**.\n\nСобирать прибыль: \`прибыль\``);
 });
 
+// ==================== PRODAJA BIZNESA ====================
+
+const pendingBusinessSales = new Map();
+
+bot.hears(/^(продать)\s+(бизнес)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  if (!u.business || u.business === "Отсутствует") {
+    return ctx.reply("❌ У вас нет бизнеса для продажи!");
+  }
+
+  const item = BIZ.find(b => b.name === u.business);
+  const sellPrice = item ? Math.floor(item.price / 3) : Math.floor((u.bizIncome || 0) * 10);
+
+  u.balance += sellPrice;
+  const oldBiz = u.business;
+  u.business = "Отсутствует";
+  u.bizIncome = 0;
+  u.lastBizCollect = 0;
+
+  await ctx.reply(`✅ Вы продали бизнес **${oldBiz}** системе за **${sellPrice.toLocaleString()} монет** (1/3 от цены).`);
+});
+
+bot.hears(/^(продать)\s+@?(\S+)\s+(\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  if (!u.business || u.business === "Отсутствует") {
+    return ctx.reply("❌ У вас нет бизнеса для продажи!");
+  }
+
+  const targetUsername = ctx.match[2].replace("@", "").toLowerCase();
+  const price = Number(ctx.match[3]);
+
+  if (!price || price <= 0) return ctx.reply("❌ Укажите корректную цену!");
+  if (targetUsername === (ctx.from.username || "").toLowerCase()) {
+    return ctx.reply("❌ Нельзя продать бизнес самому себе!");
+  }
+
+  pendingBusinessSales.set(String(ctx.from.id), {
+    targetUsername,
+    price,
+    businessName: u.business,
+    businessIncome: u.bizIncome,
+    timestamp: Date.now()
+  });
+
+  const buyKeyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("🛒 Купить", `buybiz_${ctx.from.id}`)]
+  ]);
+
+  await ctx.reply(
+    `📢 **ПРЕДЛОЖЕНИЕ О ПРОДАЖЕ БИЗНЕСА**\n\n` +
+    `🏢 Бизнес: **${u.business}**\n` +
+    `💰 Цена: **${price.toLocaleString()} монет**\n` +
+    `👤 Покупатель: @${targetUsername}\n\n` +
+    `Нажмите кнопку ниже, чтобы купить:`,
+    buyKeyboard
+  );
+});
+
+bot.action(/^buybiz_(\d+)$/, async (ctx) => {
+  const sellerId = ctx.match[1];
+  const buyerUsername = (ctx.from.username || "").toLowerCase();
+  const saleEntry = pendingBusinessSales.get(sellerId);
+
+  if (!saleEntry) {
+    return ctx.answerCbQuery("❌ Это предложение больше не активно.", { show_alert: true });
+  }
+  if (saleEntry.targetUsername !== buyerUsername) {
+    return ctx.answerCbQuery("❌ Это предложение не для вас!", { show_alert: true });
+  }
+
+  const buyer = ecoUserById(ctx.from.id, ctx.from.first_name, ctx.from.username);
+
+  if (buyer.balance < saleEntry.price) {
+    return ctx.answerCbQuery(`❌ Недостаточно средств! Нужно: ${saleEntry.price.toLocaleString()} монет.`, { show_alert: true });
+  }
+
+  const seller = economyUsers.get(sellerId);
+  if (!seller || seller.business !== saleEntry.businessName) {
+    pendingBusinessSales.delete(sellerId);
+    return ctx.answerCbQuery("❌ Этот бизнес уже продан или недоступен.", { show_alert: true });
+  }
+
+  buyer.balance -= saleEntry.price;
+  seller.balance += saleEntry.price;
+
+  buyer.business = saleEntry.businessName;
+  buyer.bizIncome = saleEntry.businessIncome;
+  buyer.lastBizCollect = Date.now();
+
+  seller.business = "Отсутствует";
+  seller.bizIncome = 0;
+  seller.lastBizCollect = 0;
+
+  pendingBusinessSales.delete(sellerId);
+
+  await ctx.editMessageText(`🎉 Бизнес **${saleEntry.businessName}** успешно куплен пользователем @${buyerUsername} за **${saleEntry.price.toLocaleString()} монет**!`);
+
+  try {
+    await bot.telegram.sendMessage(seller.id, `✅ Ваш бизнес **${saleEntry.businessName}** был куплен за **${saleEntry.price.toLocaleString()} монет**!`, { parse_mode: "Markdown" });
+  } catch (e) {}
+
+  ctx.answerCbQuery();
+});
+
+
 bot.hears(/^(купить|sotib) (яхту) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const idx = Number(ctx.match[3]) - 1;
@@ -534,6 +639,8 @@ bot.hears(/^(работа|work|работать)$/i, async (ctx) => {
   await ctx.reply(`👨‍💻 Вы поработали **${randomJob}** и заработали **+${reward.toLocaleString()} монет**!`);
 });
 
+const activeCrimes = new Map();
+
 bot.hears(/^(ограбление|crime|криминал)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const now = Date.now();
@@ -543,16 +650,119 @@ bot.hears(/^(ограбление|crime|криминал)$/i, async (ctx) => {
   }
   u.lastCrime = now;
 
-  if (Math.random() < 0.40) {
-    let reward = Math.floor(Math.random() * 35000) + 10000;
-    u.balance += reward;
-    addExp(u, 30);
-    await ctx.reply(`🥷 Успешное дело! Вы взломали банкомат и забрали **+${reward.toLocaleString()} монет**!`);
-  } else {
-    let penalty = Math.floor(u.balance * 0.20);
-    u.balance -= penalty;
-    await ctx.reply(`🚨 Вас поймала полиция! Вы заплатили штраф в размере **-${penalty.toLocaleString()} монет**.`);
+  const candidates = Array.from(economyUsers.values()).filter(x =>
+    String(x.id) !== String(ctx.from.id) && x.balance > 1000 && !activeCrimes.has(String(x.id))
+  );
+
+  if (candidates.length === 0) {
+    if (Math.random() < 0.40) {
+      let reward = Math.floor(Math.random() * 35000) + 10000;
+      u.balance += reward;
+      addExp(u, 30);
+      return ctx.reply(`🥷 Успешное дело! Вы взломали банкомат и забрали **+${reward.toLocaleString()} монет**!`);
+    } else {
+      let penalty = Math.floor(u.balance * 0.20);
+      u.balance -= penalty;
+      return ctx.reply(`🚨 Вас поймала полиция! Вы заплатили штраф в размере **-${penalty.toLocaleString()} монет**.`);
+    }
   }
+
+  const target = candidates[Math.floor(Math.random() * candidates.length)];
+  const percent = Math.random() * 0.15 + 0.15;
+  const amount = Math.floor(target.balance * percent);
+  const targetName = target.username ? `@${target.username}` : target.name;
+
+  await ctx.reply(`🥷 Вы выбрали цель: **${targetName}**. Ожидайте результат ограбления через 1 минуту...`);
+
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("🛡 Защититься", `defend_${ctx.from.id}_${target.id}`)]
+  ]);
+
+  let dmSent = false;
+  try {
+    await bot.telegram.sendMessage(
+      target.id,
+      `🚨 **ВНИМАНИЕ, ВАС ГРАБЯТ!**\n\nКто-то пытается украсть у вас **${amount.toLocaleString()} монет** (${Math.round(percent * 100)}% от баланса)!\n\n⏳ У вас есть 1 минута, чтобы защититься!`,
+      { parse_mode: "Markdown", ...keyboard }
+    );
+    dmSent = true;
+  } catch (e) {
+    dmSent = false;
+  }
+
+  if (!dmSent) {
+    try {
+      await ctx.reply(
+        `🚨 **${targetName}, ВАС ГРАБЯТ!**\n\nУ вас пытаются украсть **${amount.toLocaleString()} монет** (${Math.round(percent * 100)}% от баланса)!\n\n⏳ У вас есть 1 минута, чтобы защититься!\n\n⚠️ Только ${targetName} может нажать кнопку ниже.`,
+        { parse_mode: "Markdown", ...keyboard }
+      );
+      dmSent = true;
+    } catch (e) {}
+  }
+
+  activeCrimes.set(String(target.id), {
+    thiefId: ctx.from.id,
+    amount,
+    percent,
+    resolved: false
+  });
+
+  setTimeout(async () => {
+    const crime = activeCrimes.get(String(target.id));
+    if (!crime || crime.resolved) return;
+    crime.resolved = true;
+
+    const thief = economyUsers.get(String(crime.thiefId));
+    const victim = economyUsers.get(String(target.id));
+
+    if (thief && victim) {
+      victim.balance = Math.max(0, victim.balance - crime.amount);
+      thief.balance += crime.amount;
+      addExp(thief, 30);
+
+      try {
+        await bot.telegram.sendMessage(thief.id, `🥷 Успешное ограбление! Вы забрали **${crime.amount.toLocaleString()} монет** у **${ecoName(victim)}**!`, { parse_mode: "Markdown" });
+      } catch (e) {}
+      try {
+        await bot.telegram.sendMessage(victim.id, `😱 Вас ограбили! У вас украли **${crime.amount.toLocaleString()} монет**.`, { parse_mode: "Markdown" });
+      } catch (e) {}
+    }
+
+    activeCrimes.delete(String(target.id));
+  }, 60000);
+});
+
+bot.action(/^defend_(\d+)_(\d+)$/, async (ctx) => {
+  const thiefId = ctx.match[1];
+  const targetId = ctx.match[2];
+
+  if (String(ctx.from.id) !== String(targetId)) {
+    return ctx.answerCbQuery("❌ Это не ваше уведомление!", { show_alert: true });
+  }
+
+  const crime = activeCrimes.get(String(targetId));
+  if (!crime || crime.resolved) {
+    return ctx.answerCbQuery("❌ Время истекло или ограбление уже обработано.", { show_alert: true });
+  }
+  crime.resolved = true;
+
+  const thief = economyUsers.get(String(thiefId));
+  const victim = economyUsers.get(String(targetId));
+
+  if (thief && victim) {
+    const stolenBack = Math.min(thief.balance, crime.amount);
+    thief.balance -= stolenBack;
+    victim.balance += stolenBack;
+
+    await ctx.editMessageText(`🛡 **ВЫ УСПЕШНО ЗАЩИТИЛИСЬ!**\n\nВы поймали вора и забрали у него **${stolenBack.toLocaleString()} монет**!`);
+
+    try {
+      await bot.telegram.sendMessage(thief.id, `🚨 Ваша попытка ограбления провалилась! Жертва защитилась и забрала у вас **${stolenBack.toLocaleString()} монет**!`, { parse_mode: "Markdown" });
+    } catch (e) {}
+  }
+
+  activeCrimes.delete(String(targetId));
+  ctx.answerCbQuery();
 });
 
 bot.hears(/^(бонус|bonus)$/i, async (ctx) => {
