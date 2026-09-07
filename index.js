@@ -120,7 +120,8 @@ function ecoUser(ctx) {
       lastWork: 0,
       lastCrime: 0,
       wins: 0,
-      losses: 0
+      losses: 0,
+      vipUntil: 0
     });
   } else {
     const u = economyUsers.get(id);
@@ -155,7 +156,8 @@ function ecoUserById(userId, name, username) {
       lastWork: 0,
       lastCrime: 0,
       wins: 0,
-      losses: 0
+      losses: 0,
+      vipUntil: 0
     });
   }
   return economyUsers.get(id);
@@ -226,7 +228,11 @@ const BIZ = [
   { name: "🏢 IT-Компания", price: 8000000, income: 650000 },
   { name: "🏨 Пятизвездочный Отель", price: 20000000, income: 1800000 },
   { name: "⛽️ Сеть Автозаправок (АЗС)", price: 60000000, income: 5500000 },
-  { name: "💎 Завод по добыче золота", price: 150000000, income: 15000000 }
+  { name: "💎 Завод по добыче золота", price: 150000000, income: 15000000 },
+  { name: "🏦 Частный Банк", price: 400000000, income: 40000000 },
+  { name: "🛰 Космическая Компания", price: 900000000, income: 90000000 },
+  { name: "🏙 Строительная Империя", price: 2000000000, income: 200000000 },
+  { name: "🌍 Международная Корпорация", price: 5000000000, income: 500000000 }
 ];
 
 const YACHTS = [
@@ -364,9 +370,54 @@ bot.hears(/^(магазин|magazin|shop)$/i, async (ctx) => {
     `🏠 **Недвижимость:** \`недвижимость\` или \`магазин дома\`\n` +
     `📱 **Электроника:** \`телефоны\` или \`магазин телефоны\`\n` +
     `🏢 **Бизнес-Центр:** \`бизнесы\` или \`магазин бизнес\`\n` +
-    `🛥 **Яхт-Клуб:** \`яхты\` | ✈️ **Авиасалон:** \`авиасалон\`\n\n` +
+    `🛥 **Яхт-Клуб:** \`яхты\` | ✈️ **Авиасалон:** \`авиасалон\`\n` +
+    `👑 **VIP-Защита:** \`vip\` или \`магазин vip\`\n\n` +
     `💡 *Чтобы купить предмет, скопируйте команду рядом с ним!*`
   );
+});
+
+// ==================== VIP SYSTEM ====================
+
+const VIP_PLANS = [
+  { name: "👑 VIP-Защита", price: 2000000, days: 7 }
+];
+
+bot.hears(/^((магазин|magazin) vip|vip|вип)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const now = Date.now();
+  let statusText = "❌ VIP не активен";
+
+  if (u.vipUntil && u.vipUntil > now) {
+    const daysLeft = Math.ceil((u.vipUntil - now) / (24 * 60 * 60 * 1000));
+    statusText = `✅ Активен ещё **${daysLeft} дн.**`;
+  }
+
+  let text = `👑 **VIP-ЗАЩИТА ОТ ОГРАБЛЕНИЙ**\n\n`;
+  text += `🛡 Пока VIP активен, вас **нельзя** выбрать целью в \`ограбление\`!\n\n`;
+  VIP_PLANS.forEach((v, i) => {
+    text += `${i + 1}. **${v.name}** — **${v.price.toLocaleString()} монет** (${v.days} дней)\n👉 Купить: \`купить vip ${i + 1}\`\n\n`;
+  });
+  text += `📌 Ваш статус: ${statusText}`;
+
+  await ctx.reply(text, { parse_mode: "Markdown" });
+});
+
+bot.hears(/^(купить|sotib) vip (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const idx = Number(ctx.match[2]) - 1;
+  const plan = VIP_PLANS[idx];
+
+  if (!plan) return ctx.reply("❌ Такого VIP-плана нет!");
+  if (u.balance < plan.price) return ctx.reply(`❌ Недостаточно средств! Вам не хватает **${(plan.price - u.balance).toLocaleString()} монет**.`);
+
+  const now = Date.now();
+  const base = (u.vipUntil && u.vipUntil > now) ? u.vipUntil : now;
+  u.balance -= plan.price;
+  u.vipUntil = base + plan.days * 24 * 60 * 60 * 1000;
+  addExp(u, 60);
+
+  const daysLeft = Math.ceil((u.vipUntil - now) / (24 * 60 * 60 * 1000));
+  await ctx.reply(`🎉 Поздравляем! Вы приобрели **${plan.name}**!\n🛡 Защита от ограблений активна на **${daysLeft} дней**.`);
 });
 
 bot.hears(/^((магазин|magazin) (машины|авто|mashina)|автосалон)$/i, async (ctx) => {
@@ -651,7 +702,10 @@ bot.hears(/^(ограбление|crime|криминал)$/i, async (ctx) => {
   u.lastCrime = now;
 
   const candidates = Array.from(economyUsers.values()).filter(x =>
-    String(x.id) !== String(ctx.from.id) && x.balance > 1000 && !activeCrimes.has(String(x.id))
+    String(x.id) !== String(ctx.from.id) &&
+    x.balance > 1000 &&
+    !activeCrimes.has(String(x.id)) &&
+    !(x.vipUntil && x.vipUntil > now)
   );
 
   if (candidates.length === 0) {
@@ -1031,7 +1085,8 @@ bot.hears(/^(профиль|проф|profile)$/i, async (ctx) => {
     `📱 Телефон: **${u.phone}**\n` +
     `🛥 Яхта: **${u.yacht}**\n` +
     `✈️ Самолет: **${u.plane}**\n` +
-    `🏢 Бизнес: **${u.business}** (+${u.bizIncome.toLocaleString()}/час)\n\n` +
+    `🏢 Бизнес: **${u.business}** (+${u.bizIncome.toLocaleString()}/час)\n` +
+    `👑 VIP: **${(u.vipUntil && u.vipUntil > Date.now()) ? Math.ceil((u.vipUntil - Date.now()) / (24 * 60 * 60 * 1000)) + " дн." : "Нет"}**\n\n` +
     `📊 Статистика: 🟢 Побед: ${u.wins} | 🔴 Поражений: ${u.losses}`
   );
 });
