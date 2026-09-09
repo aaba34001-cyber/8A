@@ -197,7 +197,17 @@ const CARS = [
   { name: "🏎 Ferrari SF90 Stradale", price: 25000000 },
   { name: "🏎 Bugatti Chiron Sport", price: 50000000 },
   { name: "🏎 Rolls-Royce Phantom", price: 80000000 },
-  { name: "🏎 Koenigsegg Jesko", price: 120000000 }
+  { name: "🏎 Koenigsegg Jesko", price: 120000000 },
+  { name: "🏎 Bugatti Bolide", price: 180000000 },
+  { name: "🏎 Pagani Huayra R", price: 250000000 },
+  { name: "🏎 Koenigsegg Gemera", price: 320000000 },
+  { name: "🏎 Rimac Nevera", price: 400000000 },
+  { name: "🏎 SSC Tuatara", price: 500000000 },
+  { name: "🏎 Hennessey Venom F5", price: 650000000 },
+  { name: "🏎 Aston Martin Valkyrie", price: 800000000 },
+  { name: "🏎 Mercedes-AMG One", price: 950000000 },
+  { name: "🏎 Ferrari FXX-K Evo", price: 1200000000 },
+  { name: "🏎 Bugatti La Voiture Noire", price: 2000000000 }
 ];
 
 const HOUSES = [
@@ -209,7 +219,9 @@ const HOUSES = [
   { name: "🏰 Роскошная вилла", price: 12000000 },
   { name: "🏰 Особняк на Рублевке", price: 40000000 },
   { name: "👑 VIP Пентхаус в Сити", price: 100000000 },
-  { name: "🏝 Собственный тропический остров", price: 300000000 }
+  { name: "🏝 Собственный тропический остров", price: 300000000 },
+  { name: "🏰 Замок во Франции", price: 750000000 },
+  { name: "🏔 Горный особняк в Швейцарии", price: 1200000000 }
 ];
 
 const PHONES = [
@@ -232,7 +244,17 @@ const BIZ = [
   { name: "🏦 Частный Банк", price: 400000000, income: 40000000 },
   { name: "🛰 Космическая Компания", price: 900000000, income: 90000000 },
   { name: "🏙 Строительная Империя", price: 2000000000, income: 200000000 },
-  { name: "🌍 Международная Корпорация", price: 5000000000, income: 500000000 }
+  { name: "🌍 Международная Корпорация", price: 5000000000, income: 500000000 },
+  { name: "🏛 Нефтяная Империя", price: 12000000000, income: 1200000000 },
+  { name: "💎 Алмазный Картель", price: 25000000000, income: 2800000000 },
+  { name: "🚀 SpaceX-клон", price: 50000000000, income: 6000000000 },
+  { name: "🏦 Мировой Инвест-Банк", price: 80000000000, income: 10000000000 },
+  { name: "🏭 Глобальный Автозавод", price: 120000000000, income: 15000000000 },
+  { name: "🌐 Цифровой Гигант", price: 200000000000, income: 25000000000 },
+  { name: "🛢 Нефтяной Гигант", price: 350000000000, income: 45000000000 },
+  { name: "🏙 Мегаполис-Застройщик", price: 500000000000, income: 70000000000 },
+  { name: "👑 Королевский Холдинг", price: 800000000000, income: 120000000000 },
+  { name: "🌌 Межгалактическая Корпорация", price: 1500000000000, income: 250000000000 }
 ];
 
 const YACHTS = [
@@ -244,7 +266,9 @@ const YACHTS = [
 const PLANES = [
   { name: "🛩 Частный Самолет Cessna", price: 8000000 },
   { name: "✈️ Бизнес-джет Gulfstream", price: 45000000 },
-  { name: "🚀 Личный Boeing 747", price: 200000000 }
+  { name: "🚀 Личный Boeing 747", price: 200000000 },
+  { name: "🛩 Bombardier Global 7500", price: 350000000 },
+  { name: "✈️ Airbus ACJ320neo", price: 600000000 }
 ];
 
 // ==================== REPLY & ID TRANSFER ====================
@@ -1022,7 +1046,7 @@ bot.hears(/^(краш|crash) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.m
 bot.hears(/^(трейдинг|trade) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.40, 1.8, "📊 **БИРЖЕВОЙ ТРЕЙДИНГ**"));
 bot.hears(/^(казино|casino) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎰 **КАЗИНО**"));
 bot.hears(/^(кубик|dice) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎲 **ИГРА В КОСТИ**"));
-bot.hears(/^(слоты|slots) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.25, 3.5, "🎰 **СЛОТ-МАШИНА**"));
+// слоты ўчирилди
 bot.hears(/^(монетка|flip) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.40, 1.9, "🪙 **ОРЕЛ ИЛИ РЕШКА**"));
 bot.hears(/^(рулетка) (красное|черное) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[3]), 0.40, 1.95, "🎡 **РУЛЕТКА**"));
 bot.hears(/^(дартс|darts) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.2, "🎯 **ДАРТС**"));
@@ -1383,6 +1407,210 @@ async function startBot() {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await 
 
+
+
+
+
+// ==================== ЯНГИ ҚЎШИЛГАН ФУНКСИЯЛАР (аукцион + сотиш + трейдинг) ====================
+
+// --- СОТИШ (машина, дом, яхта, самолёт, телефон) ---
+bot.hears(/^(продать)\s+(машину|авто|дом|яхту|самолет|телефон)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const type = ctx.match[2].toLowerCase();
+
+  let price = 0, name = "";
+
+  if (type.includes("машин") || type.includes("авто")) {
+    if (!u.car || u.car === "Отсутствует") return ctx.reply("❌ У вас нет машины!");
+    const item = CARS.find(c => c.name === u.car);
+    price = item ? Math.floor(item.price / 3) : 10000;
+    name = u.car;
+    u.car = "Отсутствует";
+  } else if (type.includes("дом")) {
+    if (!u.house || u.house === "Отсутствует") return ctx.reply("❌ У вас нет дома!");
+    const item = HOUSES.find(h => h.name === u.house);
+    price = item ? Math.floor(item.price / 3) : 20000;
+    name = u.house;
+    u.house = "Отсутствует";
+  } else if (type.includes("яхт")) {
+    if (!u.yacht || u.yacht === "Отсутствует") return ctx.reply("❌ У вас нет яхты!");
+    const item = YACHTS.find(y => y.name === u.yacht);
+    price = item ? Math.floor(item.price / 3) : 50000;
+    name = u.yacht;
+    u.yacht = "Отсутствует";
+  } else if (type.includes("самолет")) {
+    if (!u.plane || u.plane === "Отсутствует") return ctx.reply("❌ У вас нет самолёта!");
+    const item = PLANES.find(p => p.name === u.plane);
+    price = item ? Math.floor(item.price / 3) : 100000;
+    name = u.plane;
+    u.plane = "Отсутствует";
+  } else if (type.includes("телефон")) {
+    if (!u.phone || u.phone === "Отсутствует") return ctx.reply("❌ У вас нет телефона!");
+    const item = PHONES.find(p => p.name === u.phone);
+    price = item ? Math.floor(item.price / 3) : 1000;
+    name = u.phone;
+    u.phone = "Отсутствует";
+  }
+
+  u.balance += price;
+  await ctx.reply(`✅ Вы продали **${name}** за **${price.toLocaleString()} монет** (⅓ цены).`);
+});
+
+// --- ТРЕЙДИНГ (расмли + тугмали, қийин ютиш) ---
+const tradingCharts = [
+  "https://picsum.photos/seed/chart1/600/400",
+  "https://picsum.photos/seed/chart2/600/400",
+  "https://picsum.photos/seed/chart3/600/400",
+  "https://picsum.photos/seed/chart4/600/400",
+  "https://picsum.photos/seed/chart5/600/400"
+];
+
+bot.hears(/^(трейдинг|trade) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[2]);
+  if (!bet || bet < 1000) return ctx.reply("❌ Минимальная ставка: 1000!");
+  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
+
+  u.balance -= bet;
+  const chart = tradingCharts[Math.floor(Math.random() * tradingCharts.length)];
+  const correctUp = Math.random() < 0.5;
+
+  const kb = Markup.inlineKeyboard([
+    [
+      Markup.button.callback("📈 Вверх", `trd_up_${bet}_${correctUp ? 1 : 0}`),
+      Markup.button.callback("📉 Вниз", `trd_down_${bet}_${correctUp ? 1 : 0}`)
+    ]
+  ]);
+
+  await ctx.replyWithPhoto(chart, {
+    caption: `📊 **ТРЕЙДИНГ**\nСтавка: **${bet.toLocaleString()}**\n\nКуда пойдёт график?`,
+    parse_mode: "Markdown",
+    ...kb
+  });
+});
+
+bot.action(/^trd_(up|down)_(\d+)_(\d+)$/, async (ctx) => {
+  const dir = ctx.match[1];
+  const bet = Number(ctx.match[2]);
+  const correctUp = ctx.match[3] === "1";
+  const choseUp = dir === "up";
+  const u = ecoUser(ctx);
+
+  // Ютиш эҳтимоли паст (~28%)
+  const won = (choseUp === correctUp) && Math.random() < 0.28;
+
+  if (won) {
+    const prize = Math.floor(bet * 1.9);
+    u.balance += prize;
+    u.wins = (u.wins || 0) + 1;
+    addExp(u, 12);
+    await ctx.editMessageCaption(`📈 Верно! +${prize.toLocaleString()} монет`);
+  } else {
+    u.losses = (u.losses || 0) + 1;
+    await ctx.editMessageCaption(`📉 Не угадали. -${bet.toLocaleString()} монет`);
+  }
+  ctx.answerCbQuery();
+});
+
+// --- АУКЦИОН ---
+const activeAuctions = new Map();
+
+bot.hears(/^(аукцион|auction)\s+(.+?)\s+(\d+)\s+(\d+)$/i, async (ctx) => {
+  const item = ctx.match[2].trim();
+  const start = Number(ctx.match[3]);
+  const mins = Number(ctx.match[4]);
+
+  if (!item || start < 1000 || mins < 1 || mins > 60) {
+    return ctx.reply("Формат: `аукцион [название] [цена] [минуты]`\nПример: `аукцион BMW 500000 10`");
+  }
+
+  const id = `${ctx.from.id}_${Date.now()}`;
+  activeAuctions.set(id, {
+    owner: ctx.from.id,
+    ownerName: ctx.from.first_name || "Игрок",
+    item,
+    bid: start,
+    bidder: null,
+    bidderName: null,
+    end: Date.now() + mins * 60000,
+    chat: ctx.chat.id
+  });
+
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback("💰 Ставка", `auc_bid_${id}`)],
+    [Markup.button.callback("❌ Отмена", `auc_cancel_${id}`)]
+  ]);
+
+  await ctx.reply(
+    `🏷 **АУКЦИОН**\n📦 ${item}\n💵 Старт: ${start.toLocaleString()}\n⏱ ${mins} мин.\n👤 ${ctx.from.first_name}`,
+    { parse_mode: "Markdown", ...kb }
+  );
+
+  setTimeout(async () => {
+    const a = activeAuctions.get(id);
+    if (!a) return;
+    if (a.bidder) {
+      const win = economyUsers.get(String(a.bidder));
+      const sel = economyUsers.get(String(a.owner));
+      if (win && sel && win.balance >= a.bid) {
+        win.balance -= a.bid;
+        sel.balance += a.bid;
+        try {
+          await bot.telegram.sendMessage(a.chat, `🏆 Аукцион закончен!\n📦 ${a.item}\n💰 ${a.bid.toLocaleString()}\n👑 ${a.bidderName}`);
+        } catch(e){}
+      }
+    } else {
+      try { await bot.telegram.sendMessage(a.chat, `⌛ Аукцион «${a.item}» без ставок.`); } catch(e){}
+    }
+    activeAuctions.delete(id);
+  }, mins * 60000);
+});
+
+bot.action(/^auc_bid_(.+)$/, async (ctx) => {
+  const id = ctx.match[1];
+  const a = activeAuctions.get(id);
+  if (!a) return ctx.answerCbQuery("Аукцион завершён", {show_alert:true});
+  if (Date.now() > a.end) return ctx.answerCbQuery("Время вышло", {show_alert:true});
+  if (ctx.from.id === a.owner) return ctx.answerCbQuery("Свой лот нельзя", {show_alert:true});
+
+  const u = ecoUser(ctx);
+  const need = Math.floor(a.bid * 1.05);
+  if (u.balance < need) return ctx.answerCbQuery(`Нужно ${need.toLocaleString()}`, {show_alert:true});
+
+  if (a.bidder) {
+    const prev = economyUsers.get(String(a.bidder));
+    if (prev) prev.balance += a.bid;
+  }
+
+  u.balance -= need;
+  a.bid = need;
+  a.bidder = ctx.from.id;
+  a.bidderName = ctx.from.first_name || "Игрок";
+
+  await ctx.editMessageText(
+    `🏷 АУКЦИОН\n📦 ${a.item}\n💵 ${a.bid.toLocaleString()}\n👤 Лидер: ${a.bidderName}`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback("💰 Ставка", `auc_bid_${id}`)],
+      [Markup.button.callback("❌ Отмена", `auc_cancel_${id}`)]
+    ])
+  );
+  ctx.answerCbQuery(`Ставка ${need.toLocaleString()}`);
+});
+
+bot.action(/^auc_cancel_(.+)$/, async (ctx) => {
+  const id = ctx.match[1];
+  const a = activeAuctions.get(id);
+  if (!a) return ctx.answerCbQuery("Уже завершён");
+  if (ctx.from.id !== a.owner) return ctx.answerCbQuery("Только владелец", {show_alert:true});
+
+  if (a.bidder) {
+    const prev = economyUsers.get(String(a.bidder));
+    if (prev) prev.balance += a.bid;
+  }
+  activeAuctions.delete(id);
+  await ctx.editMessageText(`❌ Аукцион «${a.item}» отменён`);
+  ctx.answerCbQuery();
+});
 
 
 bot.launch();
