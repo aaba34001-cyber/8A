@@ -1462,3 +1462,106 @@ setTimeout(() => {
     if (typeof saveDB === "function") saveDB();
   }
 }, 3000);
+
+// ==================== АУКЦИОН ====================
+const activeAuctions = new Map();
+
+bot.hears(/^(аук|аукцион)\s+(биз|бизнес|маш|машина|авто)\s+(\d+)\s+(\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const type = ctx.match[2].toLowerCase();
+  const start = Number(ctx.match[3]);
+  const mins = Number(ctx.match[4]);
+  if (start < 1000 || mins < 1 || mins > 60) return ctx.reply("❌ Формат: `аук биз 5000000 15`");
+
+  let itemName, itemField;
+  if (type.startsWith("биз")) {
+    if (!u.business || u.business === "Отсутствует") return ctx.reply("❌ Нет бизнеса!");
+    itemName = u.business; itemField = "business";
+  } else {
+    if (!u.car || u.car === "Отсутствует") return ctx.reply("❌ Нет машины!");
+    itemName = u.car; itemField = "car";
+  }
+
+  const id = ctx.from.id + "_" + Date.now();
+  activeAuctions.set(id, {
+    owner: ctx.from.id, ownerName: ctx.from.first_name || "Игрок",
+    item: itemName, field: itemField, bid: start,
+    bidder: null, bidderName: null,
+    end: Date.now() + mins * 60000, chat: ctx.chat.id
+  });
+
+  if (itemField === "business") { u.business = "Отсутствует"; u.bizIncome = 0; }
+  else u.car = "Отсутствует";
+
+  await ctx.reply(
+    "🏷 АУКЦИОН\n📦 " + itemName + "\n💵 " + start.toLocaleString() + "\n⏱ " + mins + " мин.",
+    Markup.inlineKeyboard([
+      [Markup.button.callback("💰 Ставка", "auk_bid_" + id)],
+      [Markup.button.callback("❌ Отмена", "auk_cancel_" + id)]
+    ])
+  );
+
+  setTimeout(async () => {
+    const a = activeAuctions.get(id);
+    if (!a) return;
+    if (a.bidder) {
+      const win = economyUsers.get(String(a.bidder));
+      const sel = economyUsers.get(String(a.owner));
+      if (win && sel && win.balance >= a.bid) {
+        win.balance -= a.bid; sel.balance += a.bid;
+        if (a.field === "business") {
+          const biz = BIZ.find(b => b.name === a.item);
+          win.business = a.item; win.bizIncome = biz ? biz.income : 0; win.lastBizCollect = Date.now();
+        } else win.car = a.item;
+        try { await bot.telegram.sendMessage(a.chat, "🏆 Аукцион: " + a.item + " → " + a.bidderName + " за " + a.bid.toLocaleString()); } catch(e){}
+      }
+    } else {
+      const sel = economyUsers.get(String(a.owner));
+      if (sel) {
+        if (a.field === "business") {
+          const biz = BIZ.find(b => b.name === a.item);
+          sel.business = a.item; sel.bizIncome = biz ? biz.income : 0;
+        } else sel.car = a.item;
+      }
+      try { await bot.telegram.sendMessage(a.chat, "⌛ Аукцион без ставок: " + a.item); } catch(e){}
+    }
+    activeAuctions.delete(id);
+  }, mins * 60000);
+});
+
+bot.action(/^auk_bid_(.+)$/, async (ctx) => {
+  const id = ctx.match[1];
+  const a = activeAuctions.get(id);
+  if (!a) return ctx.answerCbQuery("Завершён", {show_alert:true});
+  if (Date.now() > a.end) return ctx.answerCbQuery("Время вышло", {show_alert:true});
+  if (ctx.from.id === a.owner) return ctx.answerCbQuery("Нельзя", {show_alert:true});
+  const u = ecoUser(ctx);
+  const need = Math.floor(a.bid * 1.05);
+  if (u.balance < need) return ctx.answerCbQuery("Нужно " + need.toLocaleString(), {show_alert:true});
+  if (a.bidder) { const prev = economyUsers.get(String(a.bidder)); if (prev) prev.balance += a.bid; }
+  u.balance -= need; a.bid = need; a.bidder = ctx.from.id; a.bidderName = ctx.from.first_name || "Игрок";
+  await ctx.editMessageText("🏷 " + a.item + "\n💵 " + a.bid.toLocaleString() + "\n👤 " + a.bidderName,
+    Markup.inlineKeyboard([
+      [Markup.button.callback("💰 Ставка", "auk_bid_" + id)],
+      [Markup.button.callback("❌ Отмена", "auk_cancel_" + id)]
+    ]));
+  ctx.answerCbQuery("Ставка " + need.toLocaleString());
+});
+
+bot.action(/^auk_cancel_(.+)$/, async (ctx) => {
+  const id = ctx.match[1];
+  const a = activeAuctions.get(id);
+  if (!a) return ctx.answerCbQuery("Уже завершён");
+  if (ctx.from.id !== a.owner) return ctx.answerCbQuery("Только владелец", {show_alert:true});
+  if (a.bidder) { const prev = economyUsers.get(String(a.bidder)); if (prev) prev.balance += a.bid; }
+  const sel = economyUsers.get(String(a.owner));
+  if (sel) {
+    if (a.field === "business") {
+      const biz = BIZ.find(b => b.name === a.item);
+      sel.business = a.item; sel.bizIncome = biz ? biz.income : 0;
+    } else sel.car = a.item;
+  }
+  activeAuctions.delete(id);
+  await ctx.editMessageText("❌ Аукцион отменён");
+  ctx.answerCbQuery();
+});
