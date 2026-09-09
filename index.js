@@ -1021,11 +1021,12 @@ function playStandardGame(ctx, bet, winRate, winMult, title) {
 bot.hears(/^(краш|crash) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.5, "🚀 **CRASH GAME**"));
 // ==================== ТРЕЙДИНГ (расм + тугма) ====================
 const tradingCharts = [
-  "https://picsum.photos/seed/chart1/600/350",
-  "https://picsum.photos/seed/chart2/600/350",
-  "https://picsum.photos/seed/chart3/600/350",
-  "https://picsum.photos/seed/chart4/600/350",
-  "https://picsum.photos/seed/chart5/600/350"
+  "https://quickchart.io/chart?c={type:'line',data:{labels:['1','2','3','4','5','6','7'],datasets:[{label:'Price',data:[30,45,40,60,55,80,95],borderColor:'#00c853',fill:false}]},options:{plugins:{legend:{display:false}}}}&w=600&h=350&bkg=white",
+  "https://quickchart.io/chart?c={type:'line',data:{labels:['1','2','3','4','5','6','7'],datasets:[{label:'Price',data:[90,75,80,55,60,40,25],borderColor:'#ff1744',fill:false}]},options:{plugins:{legend:{display:false}}}}&w=600&h=350&bkg=white",
+  "https://quickchart.io/chart?c={type:'line',data:{labels:['1','2','3','4','5','6','7'],datasets:[{label:'Price',data:[40,50,45,70,65,85,100],borderColor:'#00c853',fill:false}]},options:{plugins:{legend:{display:false}}}}&w=600&h=350&bkg=white",
+  "https://quickchart.io/chart?c={type:'line',data:{labels:['1','2','3','4','5','6','7'],datasets:[{label:'Price',data:[100,85,90,60,55,30,15],borderColor:'#ff1744',fill:false}]},options:{plugins:{legend:{display:false}}}}&w=600&h=350&bkg=white",
+  "https://quickchart.io/chart?c={type:'line',data:{labels:['1','2','3','4','5','6','7'],datasets:[{label:'Price',data:[20,35,50,45,70,80,95],borderColor:'#00c853',fill:false}]},options:{plugins:{legend:{display:false}}}}&w=600&h=350&bkg=white",
+  "https://quickchart.io/chart?c={type:'line',data:{labels:['1','2','3','4','5','6','7'],datasets:[{label:'Price',data:[95,80,70,50,40,25,10],borderColor:'#ff1744',fill:false}]},options:{plugins:{legend:{display:false}}}}&w=600&h=350&bkg=white"
 ];
 
 bot.hears(/^(трейдинг|trade) (\d+)$/i, async (ctx) => {
