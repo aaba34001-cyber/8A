@@ -1019,7 +1019,60 @@ function playStandardGame(ctx, bet, winRate, winMult, title) {
 }
 
 bot.hears(/^(краш|crash) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.5, "🚀 **CRASH GAME**"));
-bot.hears(/^(трейдинг|trade) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.40, 1.8, "📊 **БИРЖЕВОЙ ТРЕЙДИНГ**"));
+// ==================== ТРЕЙДИНГ (расм + тугма) ====================
+const tradingCharts = [
+  "https://picsum.photos/seed/chart1/600/350",
+  "https://picsum.photos/seed/chart2/600/350",
+  "https://picsum.photos/seed/chart3/600/350",
+  "https://picsum.photos/seed/chart4/600/350",
+  "https://picsum.photos/seed/chart5/600/350"
+];
+
+bot.hears(/^(трейдинг|trade) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[2]);
+  if (!bet || bet < 1000) return ctx.reply("❌ Минимальная ставка: 1000 монет!");
+  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
+
+  u.balance -= bet;
+  const chart = tradingCharts[Math.floor(Math.random() * tradingCharts.length)];
+  const correctUp = Math.random() < 0.5;
+
+  const kb = Markup.inlineKeyboard([
+    [
+      Markup.button.callback("📈 Вверх", `trd_up_${bet}_${correctUp ? 1 : 0}`),
+      Markup.button.callback("📉 Вниз", `trd_down_${bet}_${correctUp ? 1 : 0}`)
+    ]
+  ]);
+
+  await ctx.replyWithPhoto(chart, {
+    caption: `📊 **ТРЕЙДИНГ**\n\nСтавка: **${bet.toLocaleString()} монет**\n\nКуда пойдёт график?`,
+    parse_mode: "Markdown",
+    ...kb
+  });
+});
+
+bot.action(/^trd_(up|down)_(\d+)_(\d+)$/, async (ctx) => {
+  const dir = ctx.match[1];
+  const bet = Number(ctx.match[2]);
+  const correctUp = ctx.match[3] === "1";
+  const choseUp = dir === "up";
+  const u = ecoUser(ctx);
+
+  const won = (choseUp === correctUp) && (Math.random() < 0.28);
+
+  if (won) {
+    const prize = Math.floor(bet * 1.9);
+    u.balance += prize;
+    u.wins = (u.wins || 0) + 1;
+    if (typeof addExp === "function") addExp(u, 12);
+    await ctx.editMessageCaption(`📈 **Верно!**\n💰 Выигрыш: **+${prize.toLocaleString()} монет**`, { parse_mode: "Markdown" });
+  } else {
+    u.losses = (u.losses || 0) + 1;
+    await ctx.editMessageCaption(`📉 **Не угадали**\n💸 Потеряно: **-${bet.toLocaleString()} монет**`, { parse_mode: "Markdown" });
+  }
+  ctx.answerCbQuery();
+});
 bot.hears(/^(казино|casino) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎰 **КАЗИНО**"));
 bot.hears(/^(кубик|dice) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎲 **ИГРА В КОСТИ**"));
 bot.hears(/^(слоты|slots) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.25, 3.5, "🎰 **СЛОТ-МАШИНА**"));
