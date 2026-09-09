@@ -1043,7 +1043,7 @@ function playStandardGame(ctx, bet, winRate, winMult, title) {
 }
 
 bot.hears(/^(краш|crash) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.5, "🚀 **CRASH GAME**"));
-bot.hears(/^(трейдинг|trade) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.40, 1.8, "📊 **БИРЖЕВОЙ ТРЕЙДИНГ**"));
+, 0.40, 1.8, "📊 **БИРЖЕВОЙ ТРЕЙДИНГ**"));
 bot.hears(/^(казино|casino) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎰 **КАЗИНО**"));
 bot.hears(/^(кубик|dice) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎲 **ИГРА В КОСТИ**"));
 // слоты ўчирилди
