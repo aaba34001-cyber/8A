@@ -755,7 +755,7 @@ function playStandardGame(ctx, bet, winRate, winMult, title) {
 }
 
 bot.hears(/^(краш|crash) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.5, "🚀 **CRASH GAME**"));
-bot.hears(/^(трейдинг|trade) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.40, 1.8, "📊 **БИРЖЕВОЙ ТРЕЙДИНГ**"));
+// eski treyding olib tashlandi
 bot.hears(/^(казино|casino) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎰 **КАЗИНО**"));
 bot.hears(/^(кубик|dice) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎲 **ИГРА В КОСТИ**"));
 bot.hears(/^(слоты|slots) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.25, 3.5, "🎰 **СЛОТ-МАШИНА**"));
@@ -1119,6 +1119,162 @@ async function startBot() {
     await 
 
 
+
+
+// ==================== ТРЕЙДИНГ (расм + тугма) ====================
+const tradingCharts = [
+  "https://picsum.photos/seed/chart1/600/350",
+  "https://picsum.photos/seed/chart2/600/350",
+  "https://picsum.photos/seed/chart3/600/350",
+  "https://picsum.photos/seed/chart4/600/350",
+  "https://picsum.photos/seed/chart5/600/350"
+];
+
+bot.hears(/^(трейдинг|trade) (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const bet = Number(ctx.match[2]);
+  if (!bet || bet < 1000) return ctx.reply("❌ Минимальная ставка: 1000 монет!");
+  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
+
+  u.balance -= bet;
+  const chart = tradingCharts[Math.floor(Math.random() * tradingCharts.length)];
+  const correctUp = Math.random() < 0.5;
+
+  const kb = Markup.inlineKeyboard([
+    [
+      Markup.button.callback("📈 Вверх", `trd_up_${bet}_${correctUp ? 1 : 0}`),
+      Markup.button.callback("📉 Вниз", `trd_down_${bet}_${correctUp ? 1 : 0}`)
+    ]
+  ]);
+
+  await ctx.replyWithPhoto(chart, {
+    caption: `📊 **ТРЕЙДИНГ**\n\nСтавка: **${bet.toLocaleString()} монет**\n\nКуда пойдёт график?`,
+    parse_mode: "Markdown",
+    ...kb
+  });
+});
+
+bot.action(/^trd_(up|down)_(\d+)_(\d+)$/, async (ctx) => {
+  const dir = ctx.match[1];
+  const bet = Number(ctx.match[2]);
+  const correctUp = ctx.match[3] === "1";
+  const choseUp = dir === "up";
+  const u = ecoUser(ctx);
+
+  const won = (choseUp === correctUp) && (Math.random() < 0.28);
+
+  if (won) {
+    const prize = Math.floor(bet * 1.9);
+    u.balance += prize;
+    u.wins = (u.wins || 0) + 1;
+    if (typeof addExp === "function") addExp(u, 12);
+    await ctx.editMessageCaption(`📈 **Верно!**\n💰 Выигрыш: **+${prize.toLocaleString()} монет**`, { parse_mode: "Markdown" });
+  } else {
+    u.losses = (u.losses || 0) + 1;
+    await ctx.editMessageCaption(`📉 **Не угадали**\n💸 Потеряно: **-${bet.toLocaleString()} монет**`, { parse_mode: "Markdown" });
+  }
+  ctx.answerCbQuery();
+});
+
+// ==================== АУКЦИОН ====================
+const activeAuctions = new Map();
+
+bot.hears(/^(аукцион|auction)\s+(.+?)\s+(\d+)\s+(\d+)$/i, async (ctx) => {
+  const item = ctx.match[2].trim();
+  const start = Number(ctx.match[3]);
+  const mins = Number(ctx.match[4]);
+
+  if (!item || start < 1000 || mins < 1 || mins > 60) {
+    return ctx.reply("Формат: `аукцион [название] [цена] [минуты]`\nПример: `аукцион BMW 500000 10`");
+  }
+
+  const id = `${ctx.from.id}_${Date.now()}`;
+  activeAuctions.set(id, {
+    owner: ctx.from.id,
+    ownerName: ctx.from.first_name || "Игрок",
+    item,
+    bid: start,
+    bidder: null,
+    bidderName: null,
+    end: Date.now() + mins * 60000,
+    chat: ctx.chat.id
+  });
+
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback("💰 Ставка", `auc_bid_${id}`)],
+    [Markup.button.callback("❌ Отмена", `auc_cancel_${id}`)]
+  ]);
+
+  await ctx.reply(
+    `🏷 **АУКЦИОН**\n📦 ${item}\n💵 Старт: ${start.toLocaleString()}\n⏱ ${mins} мин.\n👤 ${ctx.from.first_name}`,
+    { parse_mode: "Markdown", ...kb }
+  );
+
+  setTimeout(async () => {
+    const a = activeAuctions.get(id);
+    if (!a) return;
+    if (a.bidder) {
+      const win = economyUsers.get(String(a.bidder));
+      const sel = economyUsers.get(String(a.owner));
+      if (win && sel && win.balance >= a.bid) {
+        win.balance -= a.bid;
+        sel.balance += a.bid;
+        try {
+          await bot.telegram.sendMessage(a.chat, `🏆 Аукцион закончен!\n📦 ${a.item}\n💰 ${a.bid.toLocaleString()}\n👑 ${a.bidderName}`);
+        } catch(e){}
+      }
+    } else {
+      try { await bot.telegram.sendMessage(a.chat, `⌛ Аукцион «${a.item}» без ставок.`); } catch(e){}
+    }
+    activeAuctions.delete(id);
+  }, mins * 60000);
+});
+
+bot.action(/^auc_bid_(.+)$/, async (ctx) => {
+  const id = ctx.match[1];
+  const a = activeAuctions.get(id);
+  if (!a) return ctx.answerCbQuery("Аукцион завершён", {show_alert:true});
+  if (Date.now() > a.end) return ctx.answerCbQuery("Время вышло", {show_alert:true});
+  if (ctx.from.id === a.owner) return ctx.answerCbQuery("Свой лот нельзя", {show_alert:true});
+
+  const u = ecoUser(ctx);
+  const need = Math.floor(a.bid * 1.05);
+  if (u.balance < need) return ctx.answerCbQuery(`Нужно ${need.toLocaleString()}`, {show_alert:true});
+
+  if (a.bidder) {
+    const prev = economyUsers.get(String(a.bidder));
+    if (prev) prev.balance += a.bid;
+  }
+
+  u.balance -= need;
+  a.bid = need;
+  a.bidder = ctx.from.id;
+  a.bidderName = ctx.from.first_name || "Игрок";
+
+  await ctx.editMessageText(
+    `🏷 АУКЦИОН\n📦 ${a.item}\n💵 ${a.bid.toLocaleString()}\n👤 Лидер: ${a.bidderName}`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback("💰 Ставка", `auc_bid_${id}`)],
+      [Markup.button.callback("❌ Отмена", `auc_cancel_${id}`)]
+    ])
+  );
+  ctx.answerCbQuery(`Ставка ${need.toLocaleString()}`);
+});
+
+bot.action(/^auc_cancel_(.+)$/, async (ctx) => {
+  const id = ctx.match[1];
+  const a = activeAuctions.get(id);
+  if (!a) return ctx.answerCbQuery("Уже завершён");
+  if (ctx.from.id !== a.owner) return ctx.answerCbQuery("Только владелец", {show_alert:true});
+
+  if (a.bidder) {
+    const prev = economyUsers.get(String(a.bidder));
+    if (prev) prev.balance += a.bid;
+  }
+  activeAuctions.delete(id);
+  await ctx.editMessageText(`❌ Аукцион «${a.item}» отменён`);
+  ctx.answerCbQuery();
+});
 
 bot.launch();
     console.log("🚀 BOT UPDATED WITH EXPLICIT BUY COMMANDS!");
