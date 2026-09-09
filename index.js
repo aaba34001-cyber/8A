@@ -120,7 +120,8 @@ function ecoUser(ctx) {
       lastWork: 0,
       lastCrime: 0,
       wins: 0,
-      losses: 0
+      losses: 0,
+      vipUntil: 0
     });
   } else {
     const u = economyUsers.get(id);
@@ -155,7 +156,8 @@ function ecoUserById(userId, name, username) {
       lastWork: 0,
       lastCrime: 0,
       wins: 0,
-      losses: 0
+      losses: 0,
+      vipUntil: 0
     });
   }
   return economyUsers.get(id);
@@ -226,7 +228,11 @@ const BIZ = [
   { name: "🏢 IT-Компания", price: 8000000, income: 650000 },
   { name: "🏨 Пятизвездочный Отель", price: 20000000, income: 1800000 },
   { name: "⛽️ Сеть Автозаправок (АЗС)", price: 60000000, income: 5500000 },
-  { name: "💎 Завод по добыче золота", price: 150000000, income: 15000000 }
+  { name: "💎 Завод по добыче золота", price: 150000000, income: 15000000 },
+  { name: "🏦 Частный Банк", price: 400000000, income: 40000000 },
+  { name: "🛰 Космическая Компания", price: 900000000, income: 90000000 },
+  { name: "🏙 Строительная Империя", price: 2000000000, income: 200000000 },
+  { name: "🌍 Международная Корпорация", price: 5000000000, income: 500000000 }
 ];
 
 const YACHTS = [
@@ -364,9 +370,54 @@ bot.hears(/^(магазин|magazin|shop)$/i, async (ctx) => {
     `🏠 **Недвижимость:** \`недвижимость\` или \`магазин дома\`\n` +
     `📱 **Электроника:** \`телефоны\` или \`магазин телефоны\`\n` +
     `🏢 **Бизнес-Центр:** \`бизнесы\` или \`магазин бизнес\`\n` +
-    `🛥 **Яхт-Клуб:** \`яхты\` | ✈️ **Авиасалон:** \`авиасалон\`\n\n` +
+    `🛥 **Яхт-Клуб:** \`яхты\` | ✈️ **Авиасалон:** \`авиасалон\`\n` +
+    `👑 **VIP-Защита:** \`vip\` или \`магазин vip\`\n\n` +
     `💡 *Чтобы купить предмет, скопируйте команду рядом с ним!*`
   );
+});
+
+// ==================== VIP SYSTEM ====================
+
+const VIP_PLANS = [
+  { name: "👑 VIP-Защита", price: 2000000, days: 7 }
+];
+
+bot.hears(/^((магазин|magazin) vip|vip|вип)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const now = Date.now();
+  let statusText = "❌ VIP не активен";
+
+  if (u.vipUntil && u.vipUntil > now) {
+    const daysLeft = Math.ceil((u.vipUntil - now) / (24 * 60 * 60 * 1000));
+    statusText = `✅ Активен ещё **${daysLeft} дн.**`;
+  }
+
+  let text = `👑 **VIP-ЗАЩИТА ОТ ОГРАБЛЕНИЙ**\n\n`;
+  text += `🛡 Пока VIP активен, вас **нельзя** выбрать целью в \`ограбление\`!\n\n`;
+  VIP_PLANS.forEach((v, i) => {
+    text += `${i + 1}. **${v.name}** — **${v.price.toLocaleString()} монет** (${v.days} дней)\n👉 Купить: \`купить vip ${i + 1}\`\n\n`;
+  });
+  text += `📌 Ваш статус: ${statusText}`;
+
+  await ctx.reply(text, { parse_mode: "Markdown" });
+});
+
+bot.hears(/^(купить|sotib) vip (\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  const idx = Number(ctx.match[2]) - 1;
+  const plan = VIP_PLANS[idx];
+
+  if (!plan) return ctx.reply("❌ Такого VIP-плана нет!");
+  if (u.balance < plan.price) return ctx.reply(`❌ Недостаточно средств! Вам не хватает **${(plan.price - u.balance).toLocaleString()} монет**.`);
+
+  const now = Date.now();
+  const base = (u.vipUntil && u.vipUntil > now) ? u.vipUntil : now;
+  u.balance -= plan.price;
+  u.vipUntil = base + plan.days * 24 * 60 * 60 * 1000;
+  addExp(u, 60);
+
+  const daysLeft = Math.ceil((u.vipUntil - now) / (24 * 60 * 60 * 1000));
+  await ctx.reply(`🎉 Поздравляем! Вы приобрели **${plan.name}**!\n🛡 Защита от ограблений активна на **${daysLeft} дней**.`);
 });
 
 bot.hears(/^((магазин|magazin) (машины|авто|mashina)|автосалон)$/i, async (ctx) => {
@@ -472,6 +523,111 @@ bot.hears(/^(купить|sotib) (бизнес) (\d+)$/i, async (ctx) => {
   await ctx.reply(`🏢 Поздравляем! Вы стали владельцем бизнеса **${item.name}**!\n📈 Доход: **+${item.income.toLocaleString()} монет/час**.\n\nСобирать прибыль: \`прибыль\``);
 });
 
+// ==================== PRODAJA BIZNESA ====================
+
+const pendingBusinessSales = new Map();
+
+bot.hears(/^(продать)\s+(бизнес)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  if (!u.business || u.business === "Отсутствует") {
+    return ctx.reply("❌ У вас нет бизнеса для продажи!");
+  }
+
+  const item = BIZ.find(b => b.name === u.business);
+  const sellPrice = item ? Math.floor(item.price / 3) : Math.floor((u.bizIncome || 0) * 10);
+
+  u.balance += sellPrice;
+  const oldBiz = u.business;
+  u.business = "Отсутствует";
+  u.bizIncome = 0;
+  u.lastBizCollect = 0;
+
+  await ctx.reply(`✅ Вы продали бизнес **${oldBiz}** системе за **${sellPrice.toLocaleString()} монет** (1/3 от цены).`);
+});
+
+bot.hears(/^(продать)\s+@?(\S+)\s+(\d+)$/i, async (ctx) => {
+  const u = ecoUser(ctx);
+  if (!u.business || u.business === "Отсутствует") {
+    return ctx.reply("❌ У вас нет бизнеса для продажи!");
+  }
+
+  const targetUsername = ctx.match[2].replace("@", "").toLowerCase();
+  const price = Number(ctx.match[3]);
+
+  if (!price || price <= 0) return ctx.reply("❌ Укажите корректную цену!");
+  if (targetUsername === (ctx.from.username || "").toLowerCase()) {
+    return ctx.reply("❌ Нельзя продать бизнес самому себе!");
+  }
+
+  pendingBusinessSales.set(String(ctx.from.id), {
+    targetUsername,
+    price,
+    businessName: u.business,
+    businessIncome: u.bizIncome,
+    timestamp: Date.now()
+  });
+
+  const buyKeyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("🛒 Купить", `buybiz_${ctx.from.id}`)]
+  ]);
+
+  await ctx.reply(
+    `📢 **ПРЕДЛОЖЕНИЕ О ПРОДАЖЕ БИЗНЕСА**\n\n` +
+    `🏢 Бизнес: **${u.business}**\n` +
+    `💰 Цена: **${price.toLocaleString()} монет**\n` +
+    `👤 Покупатель: @${targetUsername}\n\n` +
+    `Нажмите кнопку ниже, чтобы купить:`,
+    buyKeyboard
+  );
+});
+
+bot.action(/^buybiz_(\d+)$/, async (ctx) => {
+  const sellerId = ctx.match[1];
+  const buyerUsername = (ctx.from.username || "").toLowerCase();
+  const saleEntry = pendingBusinessSales.get(sellerId);
+
+  if (!saleEntry) {
+    return ctx.answerCbQuery("❌ Это предложение больше не активно.", { show_alert: true });
+  }
+  if (saleEntry.targetUsername !== buyerUsername) {
+    return ctx.answerCbQuery("❌ Это предложение не для вас!", { show_alert: true });
+  }
+
+  const buyer = ecoUserById(ctx.from.id, ctx.from.first_name, ctx.from.username);
+
+  if (buyer.balance < saleEntry.price) {
+    return ctx.answerCbQuery(`❌ Недостаточно средств! Нужно: ${saleEntry.price.toLocaleString()} монет.`, { show_alert: true });
+  }
+
+  const seller = economyUsers.get(sellerId);
+  if (!seller || seller.business !== saleEntry.businessName) {
+    pendingBusinessSales.delete(sellerId);
+    return ctx.answerCbQuery("❌ Этот бизнес уже продан или недоступен.", { show_alert: true });
+  }
+
+  buyer.balance -= saleEntry.price;
+  seller.balance += saleEntry.price;
+
+  buyer.business = saleEntry.businessName;
+  buyer.bizIncome = saleEntry.businessIncome;
+  buyer.lastBizCollect = Date.now();
+
+  seller.business = "Отсутствует";
+  seller.bizIncome = 0;
+  seller.lastBizCollect = 0;
+
+  pendingBusinessSales.delete(sellerId);
+
+  await ctx.editMessageText(`🎉 Бизнес **${saleEntry.businessName}** успешно куплен пользователем @${buyerUsername} за **${saleEntry.price.toLocaleString()} монет**!`);
+
+  try {
+    await bot.telegram.sendMessage(seller.id, `✅ Ваш бизнес **${saleEntry.businessName}** был куплен за **${saleEntry.price.toLocaleString()} монет**!`, { parse_mode: "Markdown" });
+  } catch (e) {}
+
+  ctx.answerCbQuery();
+});
+
+
 bot.hears(/^(купить|sotib) (яхту) (\d+)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const idx = Number(ctx.match[3]) - 1;
@@ -534,6 +690,8 @@ bot.hears(/^(работа|work|работать)$/i, async (ctx) => {
   await ctx.reply(`👨‍💻 Вы поработали **${randomJob}** и заработали **+${reward.toLocaleString()} монет**!`);
 });
 
+const activeCrimes = new Map();
+
 bot.hears(/^(ограбление|crime|криминал)$/i, async (ctx) => {
   const u = ecoUser(ctx);
   const now = Date.now();
@@ -543,16 +701,122 @@ bot.hears(/^(ограбление|crime|криминал)$/i, async (ctx) => {
   }
   u.lastCrime = now;
 
-  if (Math.random() < 0.40) {
-    let reward = Math.floor(Math.random() * 35000) + 10000;
-    u.balance += reward;
-    addExp(u, 30);
-    await ctx.reply(`🥷 Успешное дело! Вы взломали банкомат и забрали **+${reward.toLocaleString()} монет**!`);
-  } else {
-    let penalty = Math.floor(u.balance * 0.20);
-    u.balance -= penalty;
-    await ctx.reply(`🚨 Вас поймала полиция! Вы заплатили штраф в размере **-${penalty.toLocaleString()} монет**.`);
+  const candidates = Array.from(economyUsers.values()).filter(x =>
+    String(x.id) !== String(ctx.from.id) &&
+    x.balance > 1000 &&
+    !activeCrimes.has(String(x.id)) &&
+    !(x.vipUntil && x.vipUntil > now)
+  );
+
+  if (candidates.length === 0) {
+    if (Math.random() < 0.40) {
+      let reward = Math.floor(Math.random() * 35000) + 10000;
+      u.balance += reward;
+      addExp(u, 30);
+      return ctx.reply(`🥷 Успешное дело! Вы взломали банкомат и забрали **+${reward.toLocaleString()} монет**!`);
+    } else {
+      let penalty = Math.floor(u.balance * 0.20);
+      u.balance -= penalty;
+      return ctx.reply(`🚨 Вас поймала полиция! Вы заплатили штраф в размере **-${penalty.toLocaleString()} монет**.`);
+    }
   }
+
+  const target = candidates[Math.floor(Math.random() * candidates.length)];
+  const percent = Math.random() * 0.15 + 0.15;
+  const amount = Math.floor(target.balance * percent);
+  const targetName = target.username ? `@${target.username}` : target.name;
+
+  await ctx.reply(`🥷 Вы выбрали цель: **${targetName}**. Ожидайте результат ограбления через 1 минуту...`);
+
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("🛡 Защититься", `defend_${ctx.from.id}_${target.id}`)]
+  ]);
+
+  let dmSent = false;
+  try {
+    await bot.telegram.sendMessage(
+      target.id,
+      `🚨 **ВНИМАНИЕ, ВАС ГРАБЯТ!**\n\nКто-то пытается украсть у вас **${amount.toLocaleString()} монет** (${Math.round(percent * 100)}% от баланса)!\n\n⏳ У вас есть 1 минута, чтобы защититься!`,
+      { parse_mode: "Markdown", ...keyboard }
+    );
+    dmSent = true;
+  } catch (e) {
+    dmSent = false;
+  }
+
+  if (!dmSent) {
+    try {
+      await ctx.reply(
+        `🚨 **${targetName}, ВАС ГРАБЯТ!**\n\nУ вас пытаются украсть **${amount.toLocaleString()} монет** (${Math.round(percent * 100)}% от баланса)!\n\n⏳ У вас есть 1 минута, чтобы защититься!\n\n⚠️ Только ${targetName} может нажать кнопку ниже.`,
+        { parse_mode: "Markdown", ...keyboard }
+      );
+      dmSent = true;
+    } catch (e) {}
+  }
+
+  activeCrimes.set(String(target.id), {
+    thiefId: ctx.from.id,
+    amount,
+    percent,
+    resolved: false
+  });
+
+  setTimeout(async () => {
+    const crime = activeCrimes.get(String(target.id));
+    if (!crime || crime.resolved) return;
+    crime.resolved = true;
+
+    const thief = economyUsers.get(String(crime.thiefId));
+    const victim = economyUsers.get(String(target.id));
+
+    if (thief && victim) {
+      victim.balance = Math.max(0, victim.balance - crime.amount);
+      thief.balance += crime.amount;
+      addExp(thief, 30);
+
+      try {
+        await bot.telegram.sendMessage(thief.id, `🥷 Успешное ограбление! Вы забрали **${crime.amount.toLocaleString()} монет** у **${ecoName(victim)}**!`, { parse_mode: "Markdown" });
+      } catch (e) {}
+      try {
+        await bot.telegram.sendMessage(victim.id, `😱 Вас ограбили! У вас украли **${crime.amount.toLocaleString()} монет**.`, { parse_mode: "Markdown" });
+      } catch (e) {}
+    }
+
+    activeCrimes.delete(String(target.id));
+  }, 60000);
+});
+
+bot.action(/^defend_(\d+)_(\d+)$/, async (ctx) => {
+  const thiefId = ctx.match[1];
+  const targetId = ctx.match[2];
+
+  if (String(ctx.from.id) !== String(targetId)) {
+    return ctx.answerCbQuery("❌ Это не ваше уведомление!", { show_alert: true });
+  }
+
+  const crime = activeCrimes.get(String(targetId));
+  if (!crime || crime.resolved) {
+    return ctx.answerCbQuery("❌ Время истекло или ограбление уже обработано.", { show_alert: true });
+  }
+  crime.resolved = true;
+
+  const thief = economyUsers.get(String(thiefId));
+  const victim = economyUsers.get(String(targetId));
+
+  if (thief && victim) {
+    const stolenBack = Math.min(thief.balance, crime.amount);
+    thief.balance -= stolenBack;
+    victim.balance += stolenBack;
+
+    await ctx.editMessageText(`🛡 **ВЫ УСПЕШНО ЗАЩИТИЛИСЬ!**\n\nВы поймали вора и забрали у него **${stolenBack.toLocaleString()} монет**!`);
+
+    try {
+      await bot.telegram.sendMessage(thief.id, `🚨 Ваша попытка ограбления провалилась! Жертва защитилась и забрала у вас **${stolenBack.toLocaleString()} монет**!`, { parse_mode: "Markdown" });
+    } catch (e) {}
+  }
+
+  activeCrimes.delete(String(targetId));
+  ctx.answerCbQuery();
 });
 
 bot.hears(/^(бонус|bonus)$/i, async (ctx) => {
@@ -755,7 +1019,7 @@ function playStandardGame(ctx, bet, winRate, winMult, title) {
 }
 
 bot.hears(/^(краш|crash) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.30, 2.5, "🚀 **CRASH GAME**"));
-// eski treyding olib tashlandi
+bot.hears(/^(трейдинг|trade) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.40, 1.8, "📊 **БИРЖЕВОЙ ТРЕЙДИНГ**"));
 bot.hears(/^(казино|casino) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎰 **КАЗИНО**"));
 bot.hears(/^(кубик|dice) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.35, 2.0, "🎲 **ИГРА В КОСТИ**"));
 bot.hears(/^(слоты|slots) (\d+)$/i, ctx => playStandardGame(ctx, Number(ctx.match[2]), 0.25, 3.5, "🎰 **СЛОТ-МАШИНА**"));
@@ -821,7 +1085,8 @@ bot.hears(/^(профиль|проф|profile)$/i, async (ctx) => {
     `📱 Телефон: **${u.phone}**\n` +
     `🛥 Яхта: **${u.yacht}**\n` +
     `✈️ Самолет: **${u.plane}**\n` +
-    `🏢 Бизнес: **${u.business}** (+${u.bizIncome.toLocaleString()}/час)\n\n` +
+    `🏢 Бизнес: **${u.business}** (+${u.bizIncome.toLocaleString()}/час)\n` +
+    `👑 VIP: **${(u.vipUntil && u.vipUntil > Date.now()) ? Math.ceil((u.vipUntil - Date.now()) / (24 * 60 * 60 * 1000)) + " дн." : "Нет"}**\n\n` +
     `📊 Статистика: 🟢 Побед: ${u.wins} | 🔴 Поражений: ${u.losses}`
   );
 });
@@ -1119,162 +1384,6 @@ async function startBot() {
     await 
 
 
-
-
-// ==================== ТРЕЙДИНГ (расм + тугма) ====================
-const tradingCharts = [
-  "https://picsum.photos/seed/chart1/600/350",
-  "https://picsum.photos/seed/chart2/600/350",
-  "https://picsum.photos/seed/chart3/600/350",
-  "https://picsum.photos/seed/chart4/600/350",
-  "https://picsum.photos/seed/chart5/600/350"
-];
-
-bot.hears(/^(трейдинг|trade) (\d+)$/i, async (ctx) => {
-  const u = ecoUser(ctx);
-  const bet = Number(ctx.match[2]);
-  if (!bet || bet < 1000) return ctx.reply("❌ Минимальная ставка: 1000 монет!");
-  if (u.balance < bet) return ctx.reply("❌ Недостаточно средств!");
-
-  u.balance -= bet;
-  const chart = tradingCharts[Math.floor(Math.random() * tradingCharts.length)];
-  const correctUp = Math.random() < 0.5;
-
-  const kb = Markup.inlineKeyboard([
-    [
-      Markup.button.callback("📈 Вверх", `trd_up_${bet}_${correctUp ? 1 : 0}`),
-      Markup.button.callback("📉 Вниз", `trd_down_${bet}_${correctUp ? 1 : 0}`)
-    ]
-  ]);
-
-  await ctx.replyWithPhoto(chart, {
-    caption: `📊 **ТРЕЙДИНГ**\n\nСтавка: **${bet.toLocaleString()} монет**\n\nКуда пойдёт график?`,
-    parse_mode: "Markdown",
-    ...kb
-  });
-});
-
-bot.action(/^trd_(up|down)_(\d+)_(\d+)$/, async (ctx) => {
-  const dir = ctx.match[1];
-  const bet = Number(ctx.match[2]);
-  const correctUp = ctx.match[3] === "1";
-  const choseUp = dir === "up";
-  const u = ecoUser(ctx);
-
-  const won = (choseUp === correctUp) && (Math.random() < 0.28);
-
-  if (won) {
-    const prize = Math.floor(bet * 1.9);
-    u.balance += prize;
-    u.wins = (u.wins || 0) + 1;
-    if (typeof addExp === "function") addExp(u, 12);
-    await ctx.editMessageCaption(`📈 **Верно!**\n💰 Выигрыш: **+${prize.toLocaleString()} монет**`, { parse_mode: "Markdown" });
-  } else {
-    u.losses = (u.losses || 0) + 1;
-    await ctx.editMessageCaption(`📉 **Не угадали**\n💸 Потеряно: **-${bet.toLocaleString()} монет**`, { parse_mode: "Markdown" });
-  }
-  ctx.answerCbQuery();
-});
-
-// ==================== АУКЦИОН ====================
-const activeAuctions = new Map();
-
-bot.hears(/^(аукцион|auction)\s+(.+?)\s+(\d+)\s+(\d+)$/i, async (ctx) => {
-  const item = ctx.match[2].trim();
-  const start = Number(ctx.match[3]);
-  const mins = Number(ctx.match[4]);
-
-  if (!item || start < 1000 || mins < 1 || mins > 60) {
-    return ctx.reply("Формат: `аукцион [название] [цена] [минуты]`\nПример: `аукцион BMW 500000 10`");
-  }
-
-  const id = `${ctx.from.id}_${Date.now()}`;
-  activeAuctions.set(id, {
-    owner: ctx.from.id,
-    ownerName: ctx.from.first_name || "Игрок",
-    item,
-    bid: start,
-    bidder: null,
-    bidderName: null,
-    end: Date.now() + mins * 60000,
-    chat: ctx.chat.id
-  });
-
-  const kb = Markup.inlineKeyboard([
-    [Markup.button.callback("💰 Ставка", `auc_bid_${id}`)],
-    [Markup.button.callback("❌ Отмена", `auc_cancel_${id}`)]
-  ]);
-
-  await ctx.reply(
-    `🏷 **АУКЦИОН**\n📦 ${item}\n💵 Старт: ${start.toLocaleString()}\n⏱ ${mins} мин.\n👤 ${ctx.from.first_name}`,
-    { parse_mode: "Markdown", ...kb }
-  );
-
-  setTimeout(async () => {
-    const a = activeAuctions.get(id);
-    if (!a) return;
-    if (a.bidder) {
-      const win = economyUsers.get(String(a.bidder));
-      const sel = economyUsers.get(String(a.owner));
-      if (win && sel && win.balance >= a.bid) {
-        win.balance -= a.bid;
-        sel.balance += a.bid;
-        try {
-          await bot.telegram.sendMessage(a.chat, `🏆 Аукцион закончен!\n📦 ${a.item}\n💰 ${a.bid.toLocaleString()}\n👑 ${a.bidderName}`);
-        } catch(e){}
-      }
-    } else {
-      try { await bot.telegram.sendMessage(a.chat, `⌛ Аукцион «${a.item}» без ставок.`); } catch(e){}
-    }
-    activeAuctions.delete(id);
-  }, mins * 60000);
-});
-
-bot.action(/^auc_bid_(.+)$/, async (ctx) => {
-  const id = ctx.match[1];
-  const a = activeAuctions.get(id);
-  if (!a) return ctx.answerCbQuery("Аукцион завершён", {show_alert:true});
-  if (Date.now() > a.end) return ctx.answerCbQuery("Время вышло", {show_alert:true});
-  if (ctx.from.id === a.owner) return ctx.answerCbQuery("Свой лот нельзя", {show_alert:true});
-
-  const u = ecoUser(ctx);
-  const need = Math.floor(a.bid * 1.05);
-  if (u.balance < need) return ctx.answerCbQuery(`Нужно ${need.toLocaleString()}`, {show_alert:true});
-
-  if (a.bidder) {
-    const prev = economyUsers.get(String(a.bidder));
-    if (prev) prev.balance += a.bid;
-  }
-
-  u.balance -= need;
-  a.bid = need;
-  a.bidder = ctx.from.id;
-  a.bidderName = ctx.from.first_name || "Игрок";
-
-  await ctx.editMessageText(
-    `🏷 АУКЦИОН\n📦 ${a.item}\n💵 ${a.bid.toLocaleString()}\n👤 Лидер: ${a.bidderName}`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback("💰 Ставка", `auc_bid_${id}`)],
-      [Markup.button.callback("❌ Отмена", `auc_cancel_${id}`)]
-    ])
-  );
-  ctx.answerCbQuery(`Ставка ${need.toLocaleString()}`);
-});
-
-bot.action(/^auc_cancel_(.+)$/, async (ctx) => {
-  const id = ctx.match[1];
-  const a = activeAuctions.get(id);
-  if (!a) return ctx.answerCbQuery("Уже завершён");
-  if (ctx.from.id !== a.owner) return ctx.answerCbQuery("Только владелец", {show_alert:true});
-
-  if (a.bidder) {
-    const prev = economyUsers.get(String(a.bidder));
-    if (prev) prev.balance += a.bid;
-  }
-  activeAuctions.delete(id);
-  await ctx.editMessageText(`❌ Аукцион «${a.item}» отменён`);
-  ctx.answerCbQuery();
-});
 
 bot.launch();
     console.log("🚀 BOT UPDATED WITH EXPLICIT BUY COMMANDS!");
