@@ -34,6 +34,10 @@ bot.telegram.callApi = async function (method, payload, options) {
       }
     }
     console.error('API ERROR (ignored):', method, err.message);
+    // getUpdates ДОЛЖЕН вернуть массив, иначе Telegraf упадёт на updates.length
+    if (method === 'getUpdates') {
+      return [];
+    }
     return null;
   }
 };
