@@ -1,3 +1,11 @@
+
+process.on("uncaughtException", (err) => {
+  console.error("🛑 uncaughtException (не крашим процесс):", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("🛑 unhandledRejection (не крашим процесс):", reason);
+});
+
 require("dotenv").config();
 const { Telegraf, Markup } = require("telegraf");
 
