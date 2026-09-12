@@ -2241,6 +2241,34 @@ bot.action(/^duel_guess_(.+)_(\d+)$/, async (ctx) => {
 });
 
 
+
+// Дуэль yordam
+bot.hears(/^(дуэль|duel)$/i, async (ctx) => {
+  return ctx.reply(
+    "⚔️ **Как начать дуэль:**\\n\\n" +
+    "`дуэль @ник 5000`\\n\\n" +
+    "Пример:\\n" +
+    "`дуэль @username 10000`"
+  );
+});
+
+// Пирамида yordam
+bot.hears(/^(пирамида|pyramid)$/i, async (ctx) => {
+  return ctx.reply(
+    "🔺 **Как начать игру:**\\n\\n" +
+    "`пирамида [сумма]`\\n\\n" +
+    "Пример:\\n" +
+    "`пирамида 5000`"
+  );
+});
+
+bot.hears(/^(краш|crash)$/i, (ctx) => ctx.reply("🚀 Напишите: `краш [сумма]`\\nПример: `краш 3000`"));
+bot.hears(/^(казино|casino)$/i, (ctx) => ctx.reply("🎰 Напишите: `казино [сумма]`\\nПример: `казино 5000`"));
+bot.hears(/^(мины|mines)$/i, (ctx) => ctx.reply("💣 Напишите: `мины [сумма]`\\nПример: `мины 2000`"));
+bot.hears(/^(трейдинг|trade)$/i, (ctx) => ctx.reply("📊 Напишите: `трейдинг [сумма]`\\nПример: `трейдинг 5000`"));
+bot.hears(/^(кубик|dice)$/i, (ctx) => ctx.reply("🎲 Напишите: `кубик [сумма]`\\nПример: `кубик 1000`"));
+bot.hears(/^(монетка|flip)$/i, (ctx) => ctx.reply("🪙 Напишите: `монетка [сумма]`\\nПример: `монетка 2000`"));
+
 async function startBot() {
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
