@@ -2037,14 +2037,6 @@ bot.action(/^duel_(sword|shield|bow)$/, async (ctx) => {
 // ==================== END __EXTRA_FEATURES__ ====================
 
 
-async function startBot() {
-  try {
-    await bot.telegram.deleteWebhook({ drop_pending_updates: true });
-    await 
-
-
-
-
 
 // ==================== MUTE SYSTEM ====================
 const mutedUsers = new Map();
@@ -2099,7 +2091,7 @@ bot.hears(/^\/?(размут|unmute)\s+@?(\w+)/i, async (ctx) => {
   await ctx.reply(`🔊 @${username} размучен.`);
 });
 
-// ==================== ДУЭЛЬ (2 минуты на принятие) ====================
+// ==================== ДУЭЛЬ (2 минуты) ====================
 const activeDuels = new Map();
 
 bot.hears(/^(дуэль|duel)\s+@?(\w+)\s+(\d+)/i, async (ctx) => {
@@ -2144,7 +2136,6 @@ bot.hears(/^(дуэль|duel)\s+@?(\w+)\s+(\d+)/i, async (ctx) => {
     return ctx.reply("❌ Не удалось отправить приглашение.");
   }
 
-  // 2 daqiqa timeout
   setTimeout(async () => {
     const d = activeDuels.get(duelId);
     if (!d || d.status !== "pending") return;
@@ -2250,16 +2241,18 @@ bot.action(/^duel_guess_(.+)_(\d+)$/, async (ctx) => {
 });
 
 
-bot.launch();
+async function startBot() {
+  try {
+    await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+    await bot.launch();
     console.log("🚀 BOT UPDATED WITH EXPLICIT BUY COMMANDS!");
   } catch (err) {
     console.error("Start Error:", err);
   }
 }
 
-
-
 startBot();
+
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
