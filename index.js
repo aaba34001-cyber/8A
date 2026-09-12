@@ -2044,6 +2044,212 @@ async function startBot() {
 
 
 
+
+
+// ==================== MUTE SYSTEM ====================
+const mutedUsers = new Map();
+
+function isMuted(userId) {
+  const until = mutedUsers.get(String(userId));
+  if (!until) return false;
+  if (Date.now() > until) {
+    mutedUsers.delete(String(userId));
+    return false;
+  }
+  return true;
+}
+
+bot.hears(/^\/?(mut|mute)\s+@?(\w+)\s+(\d+)/i, async (ctx) => {
+  if (ctx.from?.username?.toLowerCase() !== "man_adminn") {
+    return ctx.reply("⛔ Только @man_adminn может мутить.");
+  }
+  const username = ctx.match[2].toLowerCase();
+  const minutes = Number(ctx.match[3]);
+  if (!minutes || minutes < 1 || minutes > 1440) {
+    return ctx.reply("❌ Укажите время от 1 до 1440 минут.");
+  }
+  let targetId = null;
+  for (const [id, u] of economyUsers) {
+    if (u.username && u.username.toLowerCase() === username) {
+      targetId = id;
+      break;
+    }
+  }
+  if (!targetId) return ctx.reply("❌ Пользователь не найден в боте.");
+  const until = Date.now() + minutes * 60 * 1000;
+  mutedUsers.set(String(targetId), until);
+  await ctx.reply(`🔇 @${username} замучен на **${minutes} мин.**`);
+  try {
+    await bot.telegram.sendMessage(targetId, `🔇 Вас замутили на **${minutes} минут**.`);
+  } catch (e) {}
+});
+
+bot.hears(/^\/?(размут|unmute)\s+@?(\w+)/i, async (ctx) => {
+  if (ctx.from?.username?.toLowerCase() !== "man_adminn") return ctx.reply("⛔ Только @man_adminn.");
+  const username = ctx.match[2].toLowerCase();
+  let targetId = null;
+  for (const [id, u] of economyUsers) {
+    if (u.username && u.username.toLowerCase() === username) {
+      targetId = id;
+      break;
+    }
+  }
+  if (!targetId) return ctx.reply("❌ Пользователь не найден.");
+  mutedUsers.delete(String(targetId));
+  await ctx.reply(`🔊 @${username} размучен.`);
+});
+
+// ==================== ДУЭЛЬ (2 минуты на принятие) ====================
+const activeDuels = new Map();
+
+bot.hears(/^(дуэль|duel)\s+@?(\w+)\s+(\d+)/i, async (ctx) => {
+  if (isMuted(ctx.from.id)) return ctx.reply("🔇 Вы в муте.");
+  const targetUsername = ctx.match[2].toLowerCase();
+  const amount = Number(ctx.match[3]);
+  if (!amount || amount < 1000) return ctx.reply("❌ Минимальная ставка: 1000\\nПример: `дуэль @ник 5000`");
+  const challenger = ecoUser(ctx);
+  if (challenger.balance < amount) return ctx.reply("❌ Недостаточно средств.");
+  let targetId = null, targetUser = null;
+  for (const [id, u] of economyUsers) {
+    if (u.username && u.username.toLowerCase() === targetUsername) {
+      targetId = id; targetUser = u; break;
+    }
+  }
+  if (!targetId) return ctx.reply(`❌ @${targetUsername} ещё не запускал бота.`);
+  if (String(targetId) === String(ctx.from.id)) return ctx.reply("❌ Нельзя вызвать себя.");
+  if (targetUser.balance < amount) return ctx.reply(`❌ У @${targetUsername} недостаточно средств.`);
+
+  const duelId = `${ctx.from.id}_${targetId}_${Date.now()}`;
+  activeDuels.set(duelId, { challenger: ctx.from.id, target: targetId, amount, status: "pending", chooser: null, guesser: null, choice: null });
+
+  challenger.balance -= amount;
+  targetUser.balance -= amount;
+
+  await ctx.reply(`⚔️ Вы вызвали @${targetUsername} на **${amount.toLocaleString()}**\\n⏳ Ожидаем 2 минуты...`);
+
+  const keyboard = Markup.inlineKeyboard([[
+    Markup.button.callback("✅ Принять", `duel_accept_${duelId}`),
+    Markup.button.callback("❌ Отклонить", `duel_decline_${duelId}`)
+  ]]);
+
+  try {
+    await bot.telegram.sendMessage(targetId,
+      `⚔️ **Вас приглашают на дуэль!**\\n\\nОт: @${ctx.from.username || ctx.from.first_name}\\nСтавка: **${amount.toLocaleString()}**\\n\\n⏳ У вас **2 минуты**`,
+      { parse_mode: "Markdown", ...keyboard }
+    );
+  } catch (e) {
+    activeDuels.delete(duelId);
+    challenger.balance += amount;
+    targetUser.balance += amount;
+    return ctx.reply("❌ Не удалось отправить приглашение.");
+  }
+
+  // 2 daqiqa timeout
+  setTimeout(async () => {
+    const d = activeDuels.get(duelId);
+    if (!d || d.status !== "pending") return;
+    const ch = economyUsers.get(String(d.challenger));
+    const tg = economyUsers.get(String(d.target));
+    if (ch) ch.balance += d.amount;
+    if (tg) tg.balance += d.amount;
+    activeDuels.delete(duelId);
+    try {
+      await bot.telegram.sendMessage(d.challenger, "⌛ Время вышло. Дуэль отменена. Деньги возвращены.");
+      await bot.telegram.sendMessage(d.target, "⌛ Время вышло. Дуэль отменена.");
+    } catch (e) {}
+  }, 2 * 60 * 1000);
+});
+
+bot.action(/^duel_accept_(.+)$/, async (ctx) => {
+  const duelId = ctx.match[1];
+  const duel = activeDuels.get(duelId);
+  if (!duel || duel.status !== "pending") return ctx.answerCbQuery("Уже неактуально.", { show_alert: true });
+  if (String(ctx.from.id) !== String(duel.target)) return ctx.answerCbQuery("Это не ваше!", { show_alert: true });
+
+  duel.status = "active";
+  const roles = Math.random() < 0.5
+    ? { chooser: duel.challenger, guesser: duel.target }
+    : { chooser: duel.target, guesser: duel.challenger };
+  duel.chooser = roles.chooser;
+  duel.guesser = roles.guesser;
+
+  await ctx.editMessageText("✅ Дуэль принята!");
+
+  const fruits = [{ emoji: "🍌", name: "банан" }, { emoji: "🍎", name: "яблоко" }, { emoji: "🍒", name: "вишня" }];
+  const buttons = fruits.map((f, i) => Markup.button.callback(`${f.emoji} ${f.name}`, `duel_choose_${duelId}_${i}`));
+
+  try {
+    await bot.telegram.sendMessage(duel.chooser, `🤫 **Вы загадываете!**\\nВыберите фрукт:`, Markup.inlineKeyboard([buttons]));
+  } catch (e) {}
+  ctx.answerCbQuery();
+});
+
+bot.action(/^duel_decline_(.+)$/, async (ctx) => {
+  const duelId = ctx.match[1];
+  const duel = activeDuels.get(duelId);
+  if (!duel || duel.status !== "pending") return ctx.answerCbQuery("Уже неактуально.");
+  if (String(ctx.from.id) !== String(duel.target)) return ctx.answerCbQuery("Это не ваше!", { show_alert: true });
+
+  const ch = economyUsers.get(String(duel.challenger));
+  const tg = economyUsers.get(String(duel.target));
+  if (ch) ch.balance += duel.amount;
+  if (tg) tg.balance += duel.amount;
+  activeDuels.delete(duelId);
+
+  await ctx.editMessageText("❌ Дуэль отклонена. Деньги возвращены.");
+  try { await bot.telegram.sendMessage(duel.challenger, "❌ Соперник отклонил дуэль."); } catch (e) {}
+  ctx.answerCbQuery();
+});
+
+bot.action(/^duel_choose_(.+)_(\d+)$/, async (ctx) => {
+  const duelId = ctx.match[1];
+  const choiceIdx = Number(ctx.match[2]);
+  const duel = activeDuels.get(duelId);
+  if (!duel || duel.status !== "active") return ctx.answerCbQuery("Дуэль закончена.");
+  if (String(ctx.from.id) !== String(duel.chooser)) return ctx.answerCbQuery("Не ваш ход!", { show_alert: true });
+
+  const fruits = ["банан", "яблоко", "вишня"];
+  const emojis = ["🍌", "🍎", "🍒"];
+  duel.choice = choiceIdx;
+  await ctx.editMessageText(`✅ Вы выбрали: ${emojis[choiceIdx]} ${fruits[choiceIdx]}`);
+
+  const buttons = fruits.map((name, i) => Markup.button.callback(`${emojis[i]} ${name}`, `duel_guess_${duelId}_${i}`));
+  try {
+    await bot.telegram.sendMessage(duel.guesser, `🎯 **Угадайте фрукт!**`, Markup.inlineKeyboard([buttons]));
+  } catch (e) {}
+  ctx.answerCbQuery();
+});
+
+bot.action(/^duel_guess_(.+)_(\d+)$/, async (ctx) => {
+  const duelId = ctx.match[1];
+  const guessIdx = Number(ctx.match[2]);
+  const duel = activeDuels.get(duelId);
+  if (!duel || duel.status !== "active") return ctx.answerCbQuery("Дуэль закончена.");
+  if (String(ctx.from.id) !== String(duel.guesser)) return ctx.answerCbQuery("Не ваш ход!", { show_alert: true });
+
+  const fruits = ["банан", "яблоко", "вишня"];
+  const emojis = ["🍌", "🍎", "🍒"];
+  const correct = duel.choice === guessIdx;
+  const winnerId = correct ? duel.guesser : duel.chooser;
+  const loserId = correct ? duel.chooser : duel.guesser;
+  const winner = economyUsers.get(String(winnerId));
+  const prize = duel.amount * 2;
+  if (winner) winner.balance += prize;
+  activeDuels.delete(duelId);
+
+  const resultText = correct
+    ? `🎉 Правильно! ${emojis[guessIdx]} ${fruits[guessIdx]}\\n💰 +${prize.toLocaleString()}`
+    : `💥 Не угадали! Было: ${emojis[duel.choice]} ${fruits[duel.choice]}`;
+
+  await ctx.editMessageText(resultText);
+  try {
+    await bot.telegram.sendMessage(winnerId, `🏆 Победа в дуэли! +${prize.toLocaleString()}`);
+    await bot.telegram.sendMessage(loserId, `😔 Проигрыш в дуэли. -${duel.amount.toLocaleString()}`);
+  } catch (e) {}
+  ctx.answerCbQuery();
+});
+
+
 bot.launch();
     console.log("🚀 BOT UPDATED WITH EXPLICIT BUY COMMANDS!");
   } catch (err) {
