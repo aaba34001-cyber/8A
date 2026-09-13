@@ -1,1 +1,7 @@
-database.json
+node_modules/
+.env
+.env.local
+*.backup
+*.before-*
+*.safe-backup
+database.json.tmp
